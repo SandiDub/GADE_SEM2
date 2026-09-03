@@ -8,7 +8,7 @@ public class GADE_SEM2EditorTarget : TargetRules
 	public GADE_SEM2EditorTarget(TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Editor;
-		DefaultBuildSettings = BuildSettingsVersion.V5;
+		DefaultBuildSettings = BuildSettingsVersion.V6;
 
 		ExtraModuleNames.AddRange( new string[] { "GADE_SEM2" } );
 	}

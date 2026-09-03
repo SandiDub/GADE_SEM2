@@ -3,6 +3,8 @@
 #include "Data/EnemyData.h"
 #include "Game/TdGameState.h"
 #include "Components/StaticMeshComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Actors/CentralTower.h"
 
 AEnemy::AEnemy()
 {
@@ -54,29 +56,107 @@ void AEnemy::SetPath(const FTdPath& InPath)
 }
 
 void AEnemy::AdvanceAlongPath(float DeltaTime)
-{
-	// TODO: You write this. Do NOT use Recast.
-	//
-	// 1. If AttackTarget is valid and still in AggroRange, do not walk — TryAttack handles it.
-	// 2. Else if WaypointIndex < Path.Waypoints.Num():
-	//      MoveTowards waypoint at Data->MoveSpeed * DeltaTime.
-	//      If distance < acceptance (e.g. 20 uu), ++WaypointIndex.
-	// 3. Optional: sphere overlap for defenders in Data->AggroRange. If found, AttackTarget = that defender.
-	// 4. When waypoints are exhausted, AttackTarget = the central tower (find by class).
-	(void)DeltaTime;
+{	//If we have a target, check if it is still in range. If so, stop walking.
+    if (AttackTarget.IsValid() && Data)
+    {
+        float Dist = FVector::Dist(GetActorLocation(), AttackTarget->GetActorLocation());
+        if (Dist <= Data->AggroRange)
+        {
+            return; // TryAttack() will handle the fighting
+        }
+        else
+        {
+            AttackTarget.Reset(); // Target ran away or died, resume walking
+        }
+    }
+
+    //Move towards the next waypoint
+    if (WaypointIndex < Path.Waypoints.Num())
+    {
+        FVector CurrentLoc = GetActorLocation();
+        FVector TargetLoc = Path.Waypoints[WaypointIndex];
+		// Keep the Z coordinate the same to avoid moving up/down
+        TargetLoc.Z = CurrentLoc.Z;
+
+        // Get the direction to the waypoint
+        FVector Direction = (TargetLoc - CurrentLoc).GetSafeNormal();
+
+        // Move the enemy
+        if (Data)
+        {
+            AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, true);
+        }
+
+        // If we are close enough to the waypoint, target the next one
+        if (FVector::Dist(CurrentLoc, TargetLoc) < 50.f)
+        {
+            WaypointIndex++;
+        }
+    }
+    else
+    {
+        // We reached the end of the path, attack the Central Tower.
+        if (!AttackTarget.IsValid())
+        {
+            AActor* Tower = UGameplayStatics::GetActorOfClass(GetWorld(), ACentralTower::StaticClass());
+            if (Tower)
+            {
+                AttackTarget = Tower;
+            }
+        }
+    }
+	/*(void)DeltaTime;*/
 }
 
 void AEnemy::TryAttack(float DeltaTime)
 {
-	AttackCooldown -= DeltaTime;
-	if (!AttackTarget.IsValid() || !Data)
-	{
-		return;
-	}
+	    //If we have a target, check if it is still in range. If so, stop walking.
+        if (AttackTarget.IsValid() && Data)
+        {
+            float Dist = FVector::Dist(GetActorLocation(), AttackTarget->GetActorLocation());
+            if (Dist <= Data->AggroRange)
+            {
+                return; // TryAttack() will handle the fighting
+            }
+            else
+            {
+                AttackTarget.Reset(); // Target ran away or died, resume walking
+            }
+        }
 
-	// TODO: If AttackCooldown <= 0, TakeDamage(Data->Damage) on the target's HealthComponent.
-	// Reset AttackCooldown = Data->AttackInterval.
-	// If the target dies, clear AttackTarget so walking resumes.
+    //Move towards the next waypoint
+    if (WaypointIndex < Path.Waypoints.Num())
+    {
+        FVector CurrentLoc = GetActorLocation();
+        FVector TargetLoc = Path.Waypoints[WaypointIndex];
+
+        // Get the direction to the waypoint
+        FVector Direction = (TargetLoc - CurrentLoc).GetSafeNormal();
+
+        // Move the enemy
+        if (Data)
+        {
+            AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, true);
+        }
+
+        // If we are close enough to the waypoint, target the next one
+        if (FVector::Dist(CurrentLoc, TargetLoc) < 20.f)
+        {
+            WaypointIndex++;
+        }
+    }
+    else
+    {
+        //We reached the end of the path! Attack the Central Tower.
+        if (!AttackTarget.IsValid())
+        {
+            AActor* Tower = UGameplayStatics::GetActorOfClass(GetWorld(), ACentralTower::StaticClass());
+            if (Tower)
+            {
+                AttackTarget = Tower;
+            }
+        }
+    }
 }
 
 void AEnemy::HandleDeath()

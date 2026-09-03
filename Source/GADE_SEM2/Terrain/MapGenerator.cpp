@@ -742,8 +742,13 @@ void AMapGenerator::BuildMesh()
 			const int32 I10 = CornerIndex(Col + 1, Row);
 			const int32 I01 = CornerIndex(Col, Row + 1);
 			const int32 I11 = CornerIndex(Col + 1, Row + 1);
-			Tris.Add(I00); Tris.Add(I10); Tris.Add(I01);
-			Tris.Add(I10); Tris.Add(I11); Tris.Add(I01);
+			
+			Tris.Add(I00);
+			Tris.Add(I10);
+			Tris.Add(I01);
+			Tris.Add(I10);
+			Tris.Add(I11);
+			Tris.Add(I01);
 		}
 	}
 
@@ -752,7 +757,9 @@ void AMapGenerator::BuildMesh()
 		const FVector& A = Verts[Tris[T]];
 		const FVector& B = Verts[Tris[T + 1]];
 		const FVector& C = Verts[Tris[T + 2]];
-		const FVector N = FVector::CrossProduct(B - A, C - A).GetSafeNormal();
+		//trying to get the normal to point downwards, so that the mesh is lit correctly
+		//reason being the map is currently upside down, so the normals are also flipped
+		const FVector N = FVector::CrossProduct(B - A, C - A).GetSafeNormal() * -1.f;
 		Normals[Tris[T]] += N;
 		Normals[Tris[T + 1]] += N;
 		Normals[Tris[T + 2]] += N;
