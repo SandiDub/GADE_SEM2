@@ -95,36 +95,26 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
         }
     }
 
-    // Move towards the next waypoint
+    // 3. Move towards the next waypoint
     if (WaypointIndex < Path.Waypoints.Num())
     {
         FVector CurrentLoc = GetActorLocation();
         FVector TargetLoc = Path.Waypoints[WaypointIndex];
 
-        TargetLoc.Z = CurrentLoc.Z; // Flatten Z
+        // Remove the TargetLoc.Z flattening line! We want them to move up/down hills in 3D.
 
         FVector Direction = (TargetLoc - CurrentLoc).GetSafeNormal();
 
         if (Data)
         {
-            AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, true);
+            // CHANGE THIS TO FALSE: Turn off sweeping so they don't snag on terrain slopes!
+            AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, false);
         }
 
+        // Keep the generous distance check
         if (FVector::Dist(CurrentLoc, TargetLoc) < 50.f)
         {
             WaypointIndex++;
-        }
-    }
-    else
-    {
-        // We reached the end of the dirt path! Attack the Central Tower.
-        if (!AttackTarget.IsValid())
-        {
-            AActor* Tower = UGameplayStatics::GetActorOfClass(GetWorld(), ACentralTower::StaticClass());
-            if (Tower)
-            {
-                AttackTarget = Tower;
-            }
         }
     }
 }
