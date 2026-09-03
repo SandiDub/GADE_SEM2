@@ -24,6 +24,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Classes")
 	TSubclassOf<AEnemy> EnemyClass;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Classes")
+	TSubclassOf<class ADefender> DefenderClass;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Data")
 	TObjectPtr<UDefenderData> StarterDefender;
 

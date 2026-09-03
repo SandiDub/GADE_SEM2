@@ -10,19 +10,19 @@
 
 ADefenderSlot::ADefenderSlot()
 {
-	PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = false;
 
-	MarkerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MarkerMesh"));
-	SetRootComponent(MarkerMesh);
-	MarkerMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	MarkerMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
-	MarkerMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+    MarkerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MarkerMesh"));
+    SetRootComponent(MarkerMesh);
+    MarkerMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    MarkerMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+    MarkerMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 }
 
 void ADefenderSlot::Configure(const FTdSlotData& InData)
 {
-	SlotData = InData;
-	SetActorTransform(InData.WorldTransform);
+    SlotData = InData;
+    SetActorTransform(InData.WorldTransform);
 }
 
 bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
@@ -38,25 +38,33 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
     UDefenderData* Data = GM->StarterDefender;
     if (!Data)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Td: assign StarterDefender on the GameMode."));
+        UE_LOG(LogTemp, Warning, TEXT("Td: Assign StarterDefender on BP_TdGameMode!"));
+        return false;
+    }
+
+    if (!GM->DefenderClass)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Td: Assign DefenderClass on BP_TdGameMode!"));
         return false;
     }
 
     //If GS cannot afford Data->Cost, return false
     if (!GS->CanAfford(Data->Cost))
     {
+        UE_LOG(LogTemp, Warning, TEXT("Td: Not enough gold!"));
         return false;
     }
 
-    //Spend gold
+    //Spend the gold
     GS->TrySpendGold(Data->Cost);
 
-    //Spawn ADefender at this transform
+    //Spawn the Blueprint version of the Defender
     FActorSpawnParameters SpawnParams;
     SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-    OccupyingDefender = GetWorld()->SpawnActor<ADefender>(ADefender::StaticClass(), SlotData.WorldTransform, SpawnParams);
+    OccupyingDefender = GetWorld()->SpawnActor<ADefender>(GM->DefenderClass, SlotData.WorldTransform, SpawnParams);
 
+    //Apply data and bind delegates
     if (OccupyingDefender)
     {
         OccupyingDefender->ApplyData(Data);
@@ -80,10 +88,10 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
 
 void ADefenderSlot::HandleDefenderDeath()
 {
-	bOccupied = false;
-	OccupyingDefender = nullptr;
-	if (MarkerMesh)
-	{
-		MarkerMesh->SetVisibility(true);
-	}
+    bOccupied = false;
+    OccupyingDefender = nullptr;
+    if (MarkerMesh)
+    {
+        MarkerMesh->SetVisibility(true);
+    }
 }

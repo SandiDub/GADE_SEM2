@@ -6,6 +6,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Actors/CentralTower.h"
 #include "Actors/Defender.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Actors/CentralTower.h"
 
 AEnemy::AEnemy()
 {
@@ -57,11 +59,14 @@ void AEnemy::SetPath(const FTdPath& InPath)
 }
 
 void AEnemy::AdvanceAlongPath(float DeltaTime)
-{	//If we already have a target, check if it's still alive and in range
+{
+    //If we already have a target, check if it's still alive and in range
     if (AttackTarget.IsValid() && Data)
     {
         float Dist = FVector::Dist(GetActorLocation(), AttackTarget->GetActorLocation());
-        if (Dist <= Data->AggroRange)
+        float Reach = AttackTarget->IsA(ACentralTower::StaticClass()) ? 400.f : Data->AggroRange;
+
+        if (Dist <= Reach)
         {
             return; // Target is close! Stop walking and let TryAttack() handle it
         }
@@ -71,7 +76,7 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
         }
     }
 
-    // Scan for nearby Defenders that are placed
+    //Scan for nearby Defenders that are placed
     if (!AttackTarget.IsValid() && Data)
     {
         TArray<AActor*> OverlappedActors;
@@ -95,63 +100,20 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
         }
     }
 
-    // 3. Move towards the next waypoint
+    //Move towards the next waypoint OR acquire the Central Tower
     if (WaypointIndex < Path.Waypoints.Num())
     {
         FVector CurrentLoc = GetActorLocation();
         FVector TargetLoc = Path.Waypoints[WaypointIndex];
-
-        // Remove the TargetLoc.Z flattening line! We want them to move up/down hills in 3D.
-
         FVector Direction = (TargetLoc - CurrentLoc).GetSafeNormal();
 
         if (Data)
         {
-            // CHANGE THIS TO FALSE: Turn off sweeping so they don't snag on terrain slopes!
+            // Sweeping is FALSE so they don't snag on terrain slopes!
             AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, false);
         }
 
-        // Keep the generous distance check
         if (FVector::Dist(CurrentLoc, TargetLoc) < 50.f)
-        {
-            WaypointIndex++;
-        }
-    }
-}
-
-void AEnemy::TryAttack(float DeltaTime)
-{
-	    //If we have a target, check if it is still in range. If so, stop walking.
-        if (AttackTarget.IsValid() && Data)
-        {
-            float Dist = FVector::Dist(GetActorLocation(), AttackTarget->GetActorLocation());
-            if (Dist <= Data->AggroRange)
-            {
-                return; // TryAttack() will handle the fighting
-            }
-            else
-            {
-                AttackTarget.Reset(); // Target ran away or died, resume walking
-            }
-        }
-
-    //Move towards the next waypoint
-    if (WaypointIndex < Path.Waypoints.Num())
-    {
-        FVector CurrentLoc = GetActorLocation();
-        FVector TargetLoc = Path.Waypoints[WaypointIndex];
-
-        // Get the direction to the waypoint
-        FVector Direction = (TargetLoc - CurrentLoc).GetSafeNormal();
-
-        // Move the enemy
-        if (Data)
-        {
-            AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, true);
-        }
-
-        // If we are close enough to the waypoint, target the next one
-        if (FVector::Dist(CurrentLoc, TargetLoc) < 20.f)
         {
             WaypointIndex++;
         }
@@ -165,6 +127,27 @@ void AEnemy::TryAttack(float DeltaTime)
             if (Tower)
             {
                 AttackTarget = Tower;
+            }
+        }
+    }
+}
+
+void AEnemy::TryAttack(float DeltaTime)
+{
+    // Check if we have a valid target
+    if (AttackTarget.IsValid())
+    {
+        // Try to grab the target's Health Component
+        if (UHealthComponent* TargetHealth = AttackTarget->FindComponentByClass<UHealthComponent>())
+        {
+            // Ensure we only deal damage if the tower/defender is still alive!
+            if (!TargetHealth->IsDead() && Data)
+            {
+                
+                TargetHealth->TakeDamage(Data->Damage * DeltaTime);
+
+                
+                DrawDebugLine(GetWorld(), GetActorLocation(), AttackTarget->GetActorLocation(), FColor::Yellow, false, 0.2f, 0, 3.f);
             }
         }
     }
