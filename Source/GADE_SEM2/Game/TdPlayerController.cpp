@@ -59,6 +59,10 @@ void ATdPlayerController::SetupInputComponent()
 	{
 		EIC->BindAction(PanAction, ETriggerEvent::Triggered, this, &ATdPlayerController::HandlePan);
 	}
+	if (ZoomAction)
+	{
+		EIC->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &ATdPlayerController::HandleZoom);
+	}
 }
 
 void ATdPlayerController::HandleClick(const FInputActionValue& Value)
@@ -97,4 +101,13 @@ void ATdPlayerController::HandlePan(const FInputActionValue& Value)
 	{
 		TdPawn->Pan(Value.Get<FVector2D>());
 	}
+
 }
+void ATdPlayerController::HandleZoom(const FInputActionValue& Value)
+{
+	if (ATdPawn* TdPawn = Cast<ATdPawn>(GetPawn()))
+	{
+		TdPawn->Zoom(Value.Get<float>());
+	}
+}
+

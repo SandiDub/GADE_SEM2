@@ -30,6 +30,11 @@ public:
 
 	void Pan(FVector2D Axis);
 
+	UPROPERTY(EditAnywhere, Category = "Td|Camera")
+	float ZoomSpeed = 200.f;
+
+	void Zoom(float AxisValue);
+
 	UFUNCTION(BlueprintCallable, Category = "Td|Camera")
 	void FrameLocation(FVector WorldLocation);
 

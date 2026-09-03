@@ -27,6 +27,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Input")
 	TObjectPtr<UInputAction> PanAction;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Input")
+	TObjectPtr<UInputAction> ZoomAction;
+
+	void HandleZoom(const FInputActionValue& Value);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;

@@ -17,6 +17,7 @@ AMapGenerator::AMapGenerator()
 	TerrainMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("TerrainMesh"));
 	SetRootComponent(TerrainMesh);
 	TerrainMesh->bUseAsyncCooking = false;
+	TerrainMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 }
 
 void AMapGenerator::GenerateWorld(int32 Seed)

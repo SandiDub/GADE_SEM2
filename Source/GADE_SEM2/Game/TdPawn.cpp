@@ -36,3 +36,14 @@ void ATdPawn::Pan(FVector2D Axis)
 	const FVector Delta = FVector(Axis.Y, Axis.X, 0.f) * PanSpeed * GetWorld()->GetDeltaSeconds();
 	AddActorWorldOffset(Delta, false);
 }
+void ATdPawn::Zoom(float AxisValue)
+{
+	if (SpringArm)
+	{
+		// Multiply by negative ZoomSpeed so scrolling UP zooms IN, and DOWN zooms OUT
+		float NewLength = SpringArm->TargetArmLength + (AxisValue * -ZoomSpeed);
+
+		// Clamp it so the player can't zoom into the dirt or out into outer space
+		SpringArm->TargetArmLength = FMath::Clamp(NewLength, 1500.f, 8000.f);
+	}
+}

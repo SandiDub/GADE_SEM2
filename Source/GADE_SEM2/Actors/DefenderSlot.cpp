@@ -27,38 +27,55 @@ void ADefenderSlot::Configure(const FTdSlotData& InData)
 
 bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
 {
-	(void)Player;
+    (void)Player;
+    if (bOccupied) return false;
 
-	if (bOccupied)
-	{
-		return false;
-	}
+    ATdGameMode* GM = Cast<ATdGameMode>(UGameplayStatics::GetGameMode(this));
+    ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr;
 
-	ATdGameMode* GM = Cast<ATdGameMode>(UGameplayStatics::GetGameMode(this));
-	ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr;
-	if (!GM || !GS)
-	{
-		return false;
-	}
+    if (!GM || !GS) return false;
 
-	UDefenderData* Data = GM->StarterDefender;
-	if (!Data)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Td: assign StarterDefender on the GameMode."));
-		return false;
-	}
+    UDefenderData* Data = GM->StarterDefender;
+    if (!Data)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Td: assign StarterDefender on the GameMode."));
+        return false;
+    }
 
-	// TODO: You write the buy rules.
-	// 1. If GS cannot afford Data->Cost, return false (play a deny sound later).
-	// 2. Spend gold.
-	// 3. Spawn ADefender at this transform, ApplyData(Data), ApplyHeightAdvantage(SlotData.HeightAdvantage).
-	// 4. Bind the defender's OnDeath to HandleDefenderDeath so the slot frees.
-	// 5. Hide or dim MarkerMesh. Set bOccupied = true.
-	//
-	// Paths are never slots — the generator already excluded them. Do not add a
-	// second "can I place on grass" raycast here.
+    //If GS cannot afford Data->Cost, return false
+    if (!GS->CanAfford(Data->Cost))
+    {
+        return false;
+    }
 
-	return false;
+    //Spend gold
+    GS->TrySpendGold(Data->Cost);
+
+    //Spawn ADefender at this transform
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    OccupyingDefender = GetWorld()->SpawnActor<ADefender>(ADefender::StaticClass(), SlotData.WorldTransform, SpawnParams);
+
+    if (OccupyingDefender)
+    {
+        OccupyingDefender->ApplyData(Data);
+        OccupyingDefender->ApplyHeightAdvantage(SlotData.HeightAdvantage);
+
+        // Bind the defender's OnDeath to HandleDefenderDeath so the slot frees
+        OccupyingDefender->Health->OnDeath.AddDynamic(this, &ADefenderSlot::HandleDefenderDeath);
+
+        // Hide the MarkerMesh and set bOccupied = true
+        if (MarkerMesh)
+        {
+            MarkerMesh->SetVisibility(false);
+        }
+        bOccupied = true;
+
+        return true;
+    }
+
+    return false;
 }
 
 void ADefenderSlot::HandleDefenderDeath()

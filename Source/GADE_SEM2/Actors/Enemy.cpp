@@ -5,6 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Actors/CentralTower.h"
+#include "Actors/Defender.h"
 
 AEnemy::AEnemy()
 {
@@ -56,38 +57,59 @@ void AEnemy::SetPath(const FTdPath& InPath)
 }
 
 void AEnemy::AdvanceAlongPath(float DeltaTime)
-{	//If we have a target, check if it is still in range. If so, stop walking.
+{	//If we already have a target, check if it's still alive and in range
     if (AttackTarget.IsValid() && Data)
     {
         float Dist = FVector::Dist(GetActorLocation(), AttackTarget->GetActorLocation());
         if (Dist <= Data->AggroRange)
         {
-            return; // TryAttack() will handle the fighting
+            return; // Target is close! Stop walking and let TryAttack() handle it
         }
         else
         {
-            AttackTarget.Reset(); // Target ran away or died, resume walking
+            AttackTarget.Reset(); // Target is too far, forget it and resume walking
         }
     }
 
-    //Move towards the next waypoint
+    // Scan for nearby Defenders that are placed
+    if (!AttackTarget.IsValid() && Data)
+    {
+        TArray<AActor*> OverlappedActors;
+
+        // Scan a small sphere around the enemy, ONLY looking for placed Defenders
+        UKismetSystemLibrary::SphereOverlapActors(
+            GetWorld(),
+            GetActorLocation(),
+            Data->AggroRange,
+            TArray<TEnumAsByte<EObjectTypeQuery>>(),
+            ADefender::StaticClass(),
+            TArray<AActor*>(),
+            OverlappedActors
+        );
+
+        // If we bump into a defender, lock onto it and stop walking
+        if (OverlappedActors.Num() > 0)
+        {
+            AttackTarget = OverlappedActors[0];
+            return;
+        }
+    }
+
+    // Move towards the next waypoint
     if (WaypointIndex < Path.Waypoints.Num())
     {
         FVector CurrentLoc = GetActorLocation();
         FVector TargetLoc = Path.Waypoints[WaypointIndex];
-		// Keep the Z coordinate the same to avoid moving up/down
-        TargetLoc.Z = CurrentLoc.Z;
 
-        // Get the direction to the waypoint
+        TargetLoc.Z = CurrentLoc.Z; // Flatten Z
+
         FVector Direction = (TargetLoc - CurrentLoc).GetSafeNormal();
 
-        // Move the enemy
         if (Data)
         {
             AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, true);
         }
 
-        // If we are close enough to the waypoint, target the next one
         if (FVector::Dist(CurrentLoc, TargetLoc) < 50.f)
         {
             WaypointIndex++;
@@ -95,7 +117,7 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
     }
     else
     {
-        // We reached the end of the path, attack the Central Tower.
+        // We reached the end of the dirt path! Attack the Central Tower.
         if (!AttackTarget.IsValid())
         {
             AActor* Tower = UGameplayStatics::GetActorOfClass(GetWorld(), ACentralTower::StaticClass());
@@ -105,7 +127,6 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
             }
         }
     }
-	/*(void)DeltaTime;*/
 }
 
 void AEnemy::TryAttack(float DeltaTime)

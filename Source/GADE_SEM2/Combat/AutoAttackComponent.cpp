@@ -1,6 +1,7 @@
 #include "AutoAttackComponent.h"
 #include "HealthComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Actors/Enemy.h"
 
 UAutoAttackComponent::UAutoAttackComponent()
 {
@@ -38,28 +39,57 @@ void UAutoAttackComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 
 AActor* UAutoAttackComponent::AcquireTarget() const
 {
-	// TODO: You write this. Suggested steps:
-	// 1. Sphere overlap at owner location, radius = GetEffectiveRange().
-	//    UKismetSystemLibrary::SphereOverlapActors is the simple version.
-	// 2. Skip self and dead actors (UHealthComponent::IsDead).
-	// 3. Keep only the opposing team. Add a team getter on tower/defender/enemy,
-	//    or a tiny UTeamComponent if you prefer.
-	// 4. Return the closest remaining actor, or nullptr.
-	//
-	// Use a dedicated collision object type (TdEnemy) so you do not pick slots or the floor.
+	TArray<AActor*> IgnoredActors;
+    IgnoredActors.Add(GetOwner());
+    TArray<AActor*> OverlappedActors;
 
-	return nullptr;
+    //Scan a sphere around the tower
+    UKismetSystemLibrary::SphereOverlapActors(
+        GetWorld(),
+        GetOwner()->GetActorLocation(),
+        GetEffectiveRange(),
+        TArray<TEnumAsByte<EObjectTypeQuery>>(),
+        AActor::StaticClass(),
+        IgnoredActors,
+        OverlappedActors
+    );
+
+    AActor* ClosestTarget = nullptr;
+    float ClosestDist = TNumericLimits<float>::Max();
+
+    //Loop through everything we hit to find the closest enemy
+    for (AActor* Actor : OverlappedActors)
+    {
+        if (UHealthComponent* TargetHealth = Actor->FindComponentByClass<UHealthComponent>())
+        {
+            if (!TargetHealth->IsDead())
+            {
+                // Ensure the tower only shoots at enemies, not other defenders
+                if (Team == ETdTeam::Player && Actor->IsA(AEnemy::StaticClass()))
+                {
+                    float Dist = FVector::Dist(GetOwner()->GetActorLocation(), Actor->GetActorLocation());
+                    if (Dist < ClosestDist)
+                    {
+                        ClosestDist = Dist;
+                        ClosestTarget = Actor;
+                    }
+                }
+            }
+        }
+    }
+    return ClosestTarget;
+	
 }
 
 void UAutoAttackComponent::FireAt(AActor* Target)
 {
-	if (!Target)
-	{
-		return;
-	}
+    if (!Target) return;
 
-	// TODO: You write this.
-	// Find UHealthComponent on Target and call TakeDamage(Damage).
-	// Optionally draw a debug line for the video.
-	// Hitscan is enough for Part 1. Projectiles can wait.
+    if (UHealthComponent* TargetHealth = Target->FindComponentByClass<UHealthComponent>())
+    {
+        TargetHealth->TakeDamage(Damage);
+
+        // Draw a red laser beam for 0.2 seconds so we can visually see the tower shooting!
+        DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation(), Target->GetActorLocation(), FColor::Red, false, 0.2f, 0, 2.f);
+    }
 }
