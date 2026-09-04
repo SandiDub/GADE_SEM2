@@ -7,55 +7,54 @@
 #include "Actors/CentralTower.h"
 #include "Actors/Defender.h"
 #include "Kismet/KismetSystemLibrary.h"
-#include "Actors/CentralTower.h"
 
 AEnemy::AEnemy()
 {
-	PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.bCanEverTick = true;
 
-	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(Mesh);
+    Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+    SetRootComponent(Mesh);
 
-	Health = CreateDefaultSubobject<UHealthComponent>(TEXT("Health"));
+    Health = CreateDefaultSubobject<UHealthComponent>(TEXT("Health"));
 }
 
 void AEnemy::BeginPlay()
 {
-	Super::BeginPlay();
-	Health->OnDeath.AddDynamic(this, &AEnemy::HandleDeath);
+    Super::BeginPlay();
+    Health->OnDeath.AddDynamic(this, &AEnemy::HandleDeath);
 }
 
 void AEnemy::Tick(float DeltaTime)
 {
-	Super::Tick(DeltaTime);
-	AdvanceAlongPath(DeltaTime);
-	TryAttack(DeltaTime);
+    Super::Tick(DeltaTime);
+    AdvanceAlongPath(DeltaTime);
+    TryAttack(DeltaTime);
 }
 
 void AEnemy::ApplyData(UEnemyData* InData)
 {
-	Data = InData;
-	if (!Data)
-	{
-		return;
-	}
+    Data = InData;
+    if (!Data)
+    {
+        return;
+    }
 
-	Health->MaxHealth = Data->MaxHealth;
-	Health->ResetHealth();
-	if (Data->Mesh)
-	{
-		Mesh->SetStaticMesh(Data->Mesh);
-	}
+    Health->MaxHealth = Data->MaxHealth;
+    Health->ResetHealth();
+    if (Data->Mesh)
+    {
+        Mesh->SetStaticMesh(Data->Mesh);
+    }
 }
 
 void AEnemy::SetPath(const FTdPath& InPath)
 {
-	Path = InPath;
-	WaypointIndex = 0;
-	if (Path.Waypoints.Num() > 0)
-	{
-		SetActorLocation(Path.Waypoints[0]);
-	}
+    Path = InPath;
+    WaypointIndex = 0;
+    if (Path.Waypoints.Num() > 0)
+    {
+        SetActorLocation(Path.Waypoints[0]);
+    }
 }
 
 void AEnemy::AdvanceAlongPath(float DeltaTime)
@@ -143,11 +142,11 @@ void AEnemy::TryAttack(float DeltaTime)
             // Ensure we only deal damage if the tower/defender is still alive!
             if (!TargetHealth->IsDead() && Data)
             {
-                
-                TargetHealth->TakeDamage(Data->Damage * DeltaTime);
-
-                
+                //Draw the debug line while the target is guaranteed to still exist
                 DrawDebugLine(GetWorld(), GetActorLocation(), AttackTarget->GetActorLocation(), FColor::Yellow, false, 0.2f, 0, 3.f);
+
+                //Deal the damage smoothly over time
+                TargetHealth->TakeDamage(Data->Damage * DeltaTime);
             }
         }
     }
@@ -155,11 +154,11 @@ void AEnemy::TryAttack(float DeltaTime)
 
 void AEnemy::HandleDeath()
 {
-	if (ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
-	{
-		const int32 Reward = Data ? Data->GoldReward : 0;
-		GS->AddGold(Reward);
-		GS->AddKill();
-	}
-	Destroy();
+    if (ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
+    {
+        const int32 Reward = Data ? Data->GoldReward : 0;
+        GS->AddGold(Reward);
+        GS->AddKill();
+    }
+    Destroy();
 }

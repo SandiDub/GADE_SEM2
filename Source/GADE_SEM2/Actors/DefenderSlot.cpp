@@ -94,4 +94,5 @@ void ADefenderSlot::HandleDefenderDeath()
     {
         MarkerMesh->SetVisibility(true);
     }
+
 }

@@ -4,6 +4,17 @@
 #include "Data/DefenderData.h"
 #include "Components/StaticMeshComponent.h"
 
+void ADefender::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Bind the death event 
+	if (Health)
+	{
+		Health->OnDeath.AddDynamic(this, &ADefender::HandleDeath);
+	}
+}
+
 ADefender::ADefender()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -39,4 +50,9 @@ void ADefender::ApplyHeightAdvantage(float HeightAdvantage)
 {
 	// High ground = extra range. This is the complexity hook: generation changes tactics.
 	AutoAttack->RangeBonus = HeightAdvantage * HeightToRangeScale;
+}
+void ADefender::HandleDeath()
+{
+	// You can spawn a particle effect or play a sound here later!
+	Destroy(); // Removes the defender from the map
 }

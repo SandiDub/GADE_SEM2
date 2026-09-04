@@ -18,16 +18,20 @@ void AEnemySpawner::Configure(const FTdPath& InPath)
 	}
 }
 
-void AEnemySpawner::StartSpawning(TSubclassOf<AEnemy> EnemyClass, UEnemyData* Data, float Interval)
+void AEnemySpawner::StartSpawning(TSubclassOf<AEnemy> EnemyClass, UEnemyData* Data, float InitialInterval)
 {
 	CachedEnemyClass = EnemyClass;
 	CachedData = Data;
-	SpawnInterval = Interval;
+
+	// Set our starting speed
+	CurrentSpawnRate = InitialInterval;
 
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(SpawnTimer);
-		World->GetTimerManager().SetTimer(SpawnTimer, this, &AEnemySpawner::SpawnOne, SpawnInterval, true);
+
+		// Set looping to FALSE so we can manually re-trigger it at a faster rate
+		World->GetTimerManager().SetTimer(SpawnTimer, this, &AEnemySpawner::SpawnOne, CurrentSpawnRate, false);
 	}
 }
 
@@ -56,4 +60,20 @@ void AEnemySpawner::SpawnOne()
 		Enemy->ApplyData(CachedData);
 		Enemy->SetPath(Path);
 	}
+
+	// Increment our tracker
+	EnemiesSpawned++;
+
+	// Check if we hit a multiple of 10!
+	if (EnemiesSpawned % WaveThreshold == 0)
+	{
+		// Drop the spawn rate by 0.75s, but don't go below the 1.5s minimum
+		CurrentSpawnRate = FMath::Max(MinimumSpawnRate, CurrentSpawnRate - SpawnRateDecrease);
+
+		
+		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Red, FString::Printf(TEXT("Wave Escaping! New Spawn Rate: %f"), CurrentSpawnRate));
+	}
+
+	// Set the NEW timer 
+	GetWorld()->GetTimerManager().SetTimer(SpawnTimer, this, &AEnemySpawner::SpawnOne, CurrentSpawnRate, false);
 }

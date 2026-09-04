@@ -19,7 +19,7 @@ public:
 	void Configure(const FTdPath& InPath);
 
 	UFUNCTION(BlueprintCallable, Category = "Td")
-	void StartSpawning(TSubclassOf<AEnemy> EnemyClass, UEnemyData* Data, float Interval);
+	void StartSpawning(TSubclassOf<AEnemy> EnemyClass, UEnemyData* Data, float InitialInterval);
 
 	UFUNCTION(BlueprintCallable, Category = "Td")
 	void StopSpawning();
@@ -29,13 +29,24 @@ protected:
 
 	FTdPath Path;
 
-	UPROPERTY(EditAnywhere, Category = "Td")
-	float SpawnInterval = 2.5f;
-
 	TSubclassOf<AEnemy> CachedEnemyClass;
 
 	UPROPERTY()
 	TObjectPtr<UEnemyData> CachedData;
 
 	FTimerHandle SpawnTimer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning")
+	float CurrentSpawnRate = 18.0f; 
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning")
+	float MinimumSpawnRate = 6.0f; // The absolute fastest they can spawn
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning")
+	float SpawnRateDecrease = 0.75f; // Shaves 0.75s off the timer per threshold
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spawning")
+	int32 WaveThreshold = 8; // Number of enemies before the spawn speeds up
+
+	int32 EnemiesSpawned = 0; // Silently tracks total spawned in the background
 };

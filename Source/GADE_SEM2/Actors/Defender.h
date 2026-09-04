@@ -34,6 +34,12 @@ public:
 	void ApplyHeightAdvantage(float HeightAdvantage);
 
 protected:
+
+	virtual void BeginPlay() override;
+
 	UPROPERTY(EditAnywhere, Category = "Td")
 	float HeightToRangeScale = 0.5f;
+
+	UFUNCTION()
+	void HandleDeath();
 };
