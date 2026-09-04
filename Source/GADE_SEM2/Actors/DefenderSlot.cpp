@@ -76,7 +76,7 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
         // Hide the MarkerMesh and set bOccupied = true
         if (MarkerMesh)
         {
-            MarkerMesh->SetVisibility(false);
+            MarkerMesh->SetVisibility(false,true);
         }
         bOccupied = true;
 
@@ -92,7 +92,7 @@ void ADefenderSlot::HandleDefenderDeath()
     OccupyingDefender = nullptr;
     if (MarkerMesh)
     {
-        MarkerMesh->SetVisibility(true);
+        MarkerMesh->SetVisibility(true, true);
     }
 
 }
