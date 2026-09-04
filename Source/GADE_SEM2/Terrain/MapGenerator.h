@@ -87,7 +87,7 @@ protected:
 	void SpawnGameplayActors();
 	void DrawDebugOverlay() const;
 
-	// ----- pipeline steps: YOU implement these in MapGenerator.cpp -----
+	
 	void BuildHeightfield(FRandomStream& Rng);
 	void ChooseTowerCell();
 	void ChooseSpawnCells(FRandomStream& Rng);
