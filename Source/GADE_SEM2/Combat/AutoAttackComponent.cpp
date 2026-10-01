@@ -2,6 +2,8 @@
 #include "HealthComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Actors/Enemy.h"
+#include "Actors/Defender.h"
+#include "Data/DefenderData.h"
 
 UAutoAttackComponent::UAutoAttackComponent()
 {
@@ -39,57 +41,92 @@ void UAutoAttackComponent::TickComponent(float DeltaTime, ELevelTick TickType, F
 
 AActor* UAutoAttackComponent::AcquireTarget() const
 {
-	TArray<AActor*> IgnoredActors;
+    if (Team != ETdTeam::Player)
+    {
+        return nullptr;
+    }
+
+    TArray<AActor*> IgnoredActors;
     IgnoredActors.Add(GetOwner());
     TArray<AActor*> OverlappedActors;
 
-    //Scan a sphere around the tower
+    // Filter to enemies in the query itself rather than scanning every actor in range.
     UKismetSystemLibrary::SphereOverlapActors(
         GetWorld(),
         GetOwner()->GetActorLocation(),
         GetEffectiveRange(),
         TArray<TEnumAsByte<EObjectTypeQuery>>(),
-        AActor::StaticClass(),
+        AEnemy::StaticClass(),
         IgnoredActors,
         OverlappedActors
     );
 
-    AActor* ClosestTarget = nullptr;
-    float ClosestDist = TNumericLimits<float>::Max();
+    AActor* BestTarget = nullptr;
+    float BestScore = TNumericLimits<float>::Max();
 
-    //Loop through everything we hit to find the closest enemy
     for (AActor* Actor : OverlappedActors)
     {
-        if (UHealthComponent* TargetHealth = Actor->FindComponentByClass<UHealthComponent>())
+        const UHealthComponent* TargetHealth = Actor->FindComponentByClass<UHealthComponent>();
+        if (!TargetHealth || TargetHealth->IsDead())
         {
-            if (!TargetHealth->IsDead())
-            {
-                // Ensure the tower only shoots at enemies, not other defenders
-                if (Team == ETdTeam::Player && Actor->IsA(AEnemy::StaticClass()))
-                {
-                    float Dist = FVector::Dist(GetOwner()->GetActorLocation(), Actor->GetActorLocation());
-                    if (Dist < ClosestDist)
-                    {
-                        ClosestDist = Dist;
-                        ClosestTarget = Actor;
-                    }
-                }
-            }
+            continue;
+        }
+
+        const float Dist = FVector::Dist(GetOwner()->GetActorLocation(), Actor->GetActorLocation());
+        if (Dist < BestScore)
+        {
+            BestScore = Dist;
+            BestTarget = Actor;
         }
     }
-    return ClosestTarget;
-	
+
+    return BestTarget;
 }
 
 void UAutoAttackComponent::FireAt(AActor* Target)
 {
     if (!Target) return;
 
-    if (UHealthComponent* TargetHealth = Target->FindComponentByClass<UHealthComponent>())
-    {
-        TargetHealth->TakeDamage(Damage);
+    TArray<AActor*> Victims;
+    Victims.Add(Target);
 
-        // Draw a red laser beam for 0.2 seconds so we can visually see the tower shooting!
-        DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation(), Target->GetActorLocation(), FColor::Red, false, 0.2f, 0, 2.f);
+    UDefenderData* DefData = nullptr;
+    if (ADefender* OwnerDef = Cast<ADefender>(GetOwner()))
+    {
+        DefData = OwnerDef->GetData();
+        if (DefData && DefData->SplashRadius > 0.f)
+        {
+            TArray<AActor*> SplashHits;
+            UKismetSystemLibrary::SphereOverlapActors(
+                GetWorld(),
+                Target->GetActorLocation(),
+                DefData->SplashRadius,
+                TArray<TEnumAsByte<EObjectTypeQuery>>(),
+                AEnemy::StaticClass(),
+                TArray<AActor*>(),
+                SplashHits
+            );
+            for (AActor* Hit : SplashHits)
+            {
+                Victims.AddUnique(Hit);
+            }
+        }
     }
+
+    for (AActor* Victim : Victims)
+    {
+        if (UHealthComponent* TargetHealth = Victim->FindComponentByClass<UHealthComponent>())
+        {
+            TargetHealth->TakeDamage(Damage);
+        }
+        if (DefData && DefData->SlowDuration > 0.f)
+        {
+            if (AEnemy* E = Cast<AEnemy>(Victim))
+            {
+                E->ApplySlow(DefData->SlowMultiplier, DefData->SlowDuration);
+            }
+        }
+    }
+
+    DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation(), Target->GetActorLocation(), FColor::Red, false, 0.2f, 0, 2.f);
 }

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Wave/WaveTypes.h"
 #include "EnemyData.generated.h"
 
 class UStaticMesh;
@@ -36,4 +37,11 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Enemy")
 	TObjectPtr<UStaticMesh> Mesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Enemy")
+	ETdEnemyBehaviour Behaviour = ETdEnemyBehaviour::Grunt;
+
+	/** Spent from the director ThreatBudget when this unit is queued. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Enemy")
+	int32 ThreatCost = 10;
 };

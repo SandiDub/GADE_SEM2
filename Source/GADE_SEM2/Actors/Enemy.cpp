@@ -7,6 +7,8 @@
 #include "Actors/CentralTower.h"
 #include "Actors/Defender.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "TimerManager.h"
+#include "Wave/WaveTypes.h"
 
 AEnemy::AEnemy()
 {
@@ -39,12 +41,33 @@ void AEnemy::ApplyData(UEnemyData* InData)
         return;
     }
 
-    Health->MaxHealth = Data->MaxHealth;
+    // Wave scaling is applied at spawn so later waves genuinely out-grow a static defence.
+    HealthScale = 1.f;
+    DamageScale = 1.f;
+    SpeedScale = 1.f;
+    if (const ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
+    {
+        HealthScale = GS->EnemyHealthScale;
+        DamageScale = GS->EnemyDamageScale;
+        SpeedScale = GS->EnemySpeedScale;
+    }
+
+    Health->MaxHealth = Data->MaxHealth * HealthScale;
     Health->ResetHealth();
     if (Data->Mesh)
     {
         Mesh->SetStaticMesh(Data->Mesh);
     }
+}
+
+float AEnemy::GetMoveSpeed() const
+{
+    return Data ? Data->MoveSpeed * SpeedScale * MoveSpeedMultiplier : 0.f;
+}
+
+float AEnemy::GetAttackDamage() const
+{
+    return Data ? Data->Damage * DamageScale : 0.f;
 }
 
 void AEnemy::SetPath(const FTdPath& InPath)
@@ -59,6 +82,8 @@ void AEnemy::SetPath(const FTdPath& InPath)
 
 void AEnemy::AdvanceAlongPath(float DeltaTime)
 {
+    const ETdEnemyBehaviour Behaviour = Data ? Data->Behaviour : ETdEnemyBehaviour::Grunt;
+
     //If we already have a target, check if it's still alive and in range
     if (AttackTarget.IsValid() && Data)
     {
@@ -75,23 +100,23 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
         }
     }
 
-    //Scan for nearby Defenders that are placed
-    if (!AttackTarget.IsValid() && Data)
+    // Runner: never peel defenders. Bruiser/Grunt: scan for them.
+    if (Behaviour != ETdEnemyBehaviour::Runner && !AttackTarget.IsValid() && Data)
     {
         TArray<AActor*> OverlappedActors;
 
-        // Scan a small sphere around the enemy, ONLY looking for placed Defenders
+        const float ScanRange = Behaviour == ETdEnemyBehaviour::Bruiser ? Data->AggroRange * 1.6f : Data->AggroRange;
+
         UKismetSystemLibrary::SphereOverlapActors(
             GetWorld(),
             GetActorLocation(),
-            Data->AggroRange,
+            ScanRange,
             TArray<TEnumAsByte<EObjectTypeQuery>>(),
             ADefender::StaticClass(),
             TArray<AActor*>(),
             OverlappedActors
         );
 
-        // If we bump into a defender, lock onto it and stop walking
         if (OverlappedActors.Num() > 0)
         {
             AttackTarget = OverlappedActors[0];
@@ -99,7 +124,6 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
         }
     }
 
-    //Move towards the next waypoint OR acquire the Central Tower
     if (WaypointIndex < Path.Waypoints.Num())
     {
         FVector CurrentLoc = GetActorLocation();
@@ -108,8 +132,7 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
 
         if (Data)
         {
-            // Sweeping is FALSE so they don't snag on terrain slopes!
-            AddActorWorldOffset(Direction * Data->MoveSpeed * DeltaTime, false);
+            AddActorWorldOffset(Direction * GetMoveSpeed() * DeltaTime, false);
         }
 
         if (FVector::Dist(CurrentLoc, TargetLoc) < 50.f)
@@ -119,16 +142,38 @@ void AEnemy::AdvanceAlongPath(float DeltaTime)
     }
     else
     {
-        //We reached the end of the path! Attack the Central Tower.
         if (!AttackTarget.IsValid())
         {
             AActor* Tower = UGameplayStatics::GetActorOfClass(GetWorld(), ACentralTower::StaticClass());
             if (Tower)
             {
                 AttackTarget = Tower;
+                if (!bHasLeaked)
+                {
+                    bHasLeaked = true;
+                    if (ATdGameState* GS = GetWorld()->GetGameState<ATdGameState>())
+                    {
+                        GS->RegisterLeak();
+                    }
+                }
             }
         }
     }
+}
+
+void AEnemy::ApplySlow(float Multiplier, float Duration)
+{
+    MoveSpeedMultiplier = FMath::Clamp(Multiplier, 0.1f, 1.f);
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(SlowTimer);
+        World->GetTimerManager().SetTimer(SlowTimer, this, &AEnemy::ClearSlow, Duration, false);
+    }
+}
+
+void AEnemy::ClearSlow()
+{
+    MoveSpeedMultiplier = 1.f;
 }
 
 void AEnemy::TryAttack(float DeltaTime)
@@ -142,11 +187,14 @@ void AEnemy::TryAttack(float DeltaTime)
             // Ensure we only deal damage if the tower/defender is still alive!
             if (!TargetHealth->IsDead() && Data)
             {
-                //Draw the debug line while the target is guaranteed to still exist
                 DrawDebugLine(GetWorld(), GetActorLocation(), AttackTarget->GetActorLocation(), FColor::Yellow, false, 0.2f, 0, 3.f);
 
-                //Deal the damage smoothly over time
-                TargetHealth->TakeDamage(Data->Damage * DeltaTime);
+                float Dealt = GetAttackDamage() * DeltaTime;
+                if (Data->Behaviour == ETdEnemyBehaviour::Bruiser && AttackTarget->IsA(ADefender::StaticClass()))
+                {
+                    Dealt *= 1.75f;
+                }
+                TargetHealth->TakeDamage(Dealt);
             }
         }
     }

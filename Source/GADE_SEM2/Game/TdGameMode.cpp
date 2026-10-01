@@ -5,6 +5,10 @@
 #include "Terrain/MapGenerator.h"
 #include "Actors/EnemySpawner.h"
 #include "Actors/Enemy.h"
+#include "Actors/Defender.h"
+#include "Wave/WaveDirector.h"
+#include "Data/DefenderData.h"
+#include "Data/EnemyData.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -33,13 +37,10 @@ void ATdGameMode::StartNewMatch()
 
 	ATdGameState* GS = GetGameState<ATdGameState>();
 	const int32 Seed = FMath::Rand();
+	CurrentSpawnInterval = SpawnInterval;
 	if (GS)
 	{
-		GS->Gold = StartingGold;
-		GS->Kills = 0;
-		GS->MatchTime = 0.f;
-		GS->Seed = Seed;
-		GS->MatchState = ETdMatchState::Playing;
+		GS->ResetForNewMatch(Seed, StartingGold, WaveLength);
 	}
 	else
 	{
@@ -73,13 +74,45 @@ void ATdGameMode::StartNewMatch()
 
 	Generator->GenerateWorld(GS ? GS->Seed : Seed);
 
-	TArray<AActor*> Spawners;
-	UGameplayStatics::GetAllActorsOfClass(World, AEnemySpawner::StaticClass(), Spawners);
-	for (AActor* Actor : Spawners)
+	TArray<AActor*> SpawnerActors;
+	UGameplayStatics::GetAllActorsOfClass(World, AEnemySpawner::StaticClass(), SpawnerActors);
+	TArray<AEnemySpawner*> Spawners;
+	ActiveSpawners.Reset();
+	for (AActor* Actor : SpawnerActors)
 	{
 		if (AEnemySpawner* Spawner = Cast<AEnemySpawner>(Actor))
 		{
-			Spawner->StartSpawning(EnemyClass, StarterEnemy, SpawnInterval);
+			Spawner->SetEnemyClass(EnemyClass);
+			Spawners.Add(Spawner);
+			ActiveSpawners.Add(Spawner);
+		}
+	}
+
+	if (WaveDirectorClass)
+	{
+		if (WaveDirector)
+		{
+			WaveDirector->StopMatch();
+			WaveDirector->Destroy();
+			WaveDirector = nullptr;
+		}
+
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		WaveDirector = World->SpawnActor<AWaveDirector>(WaveDirectorClass, FTransform::Identity, Params);
+		if (WaveDirector)
+		{
+			WaveDirector->EnemyRoster = EnemyRoster.Num() > 0 ? EnemyRoster : TArray<TObjectPtr<UEnemyData>>{ StarterEnemy };
+			// One wave clock: the GameState counts waves, the director spawns them.
+			WaveDirector->WaveInterval = WaveLength;
+			WaveDirector->StartMatch(Spawners);
+		}
+	}
+	else
+	{
+		for (AEnemySpawner* Spawner : Spawners)
+		{
+			Spawner->StartSpawning(EnemyClass, StarterEnemy, CurrentSpawnInterval);
 		}
 	}
 
@@ -115,6 +148,13 @@ void ATdGameMode::RestartMatch()
 		E->Destroy();
 	}
 
+	TArray<AActor*> Defenders;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ADefender::StaticClass(), Defenders);
+	for (AActor* D : Defenders)
+	{
+		D->Destroy();
+	}
+
 	StartNewMatch();
 }
 
@@ -148,5 +188,85 @@ void ATdGameMode::NotifyTowerDestroyed()
 		}
 	}
 
+	if (WaveDirector)
+	{
+		WaveDirector->StopMatch();
+	}
+
 	// TODO (Day 7): show a game-over UMG widget (survived time, kills, Restart button).
+}
+
+int32 ATdGameMode::GetNextDefenderCost() const
+{
+	const UDefenderData* Data = GetSelectedDefenderData();
+	const int32 Base = Data ? Data->Cost : 50;
+
+	int32 Purchased = 0;
+	if (const ATdGameState* GS = GetGameState<ATdGameState>())
+	{
+		Purchased = GS->DefendersPurchased;
+	}
+
+	return Base + Purchased * DefenderCostStep;
+}
+
+void ATdGameMode::NotifyDefenderPurchased()
+{
+	if (ATdGameState* GS = GetGameState<ATdGameState>())
+	{
+		++GS->DefendersPurchased;
+	}
+}
+
+void ATdGameMode::NotifyWaveElapsed()
+{
+	ATdGameState* GS = GetGameState<ATdGameState>();
+	if (!GS || GS->MatchState != ETdMatchState::Playing)
+	{
+		return;
+	}
+
+	GS->AdvanceWave(EnemyHealthPerWave, EnemyDamagePerWave, EnemySpeedPerWave, MaxEnemySpeedScale);
+	GS->AddGold(GoldPerWave);
+
+	// The director owns cadence once it exists; otherwise tighten the Part 1 spawners.
+	if (!WaveDirector)
+	{
+		CurrentSpawnInterval = FMath::Max(MinSpawnInterval, CurrentSpawnInterval * SpawnIntervalPerWave);
+		for (AEnemySpawner* Spawner : ActiveSpawners)
+		{
+			if (Spawner)
+			{
+				Spawner->StartSpawning(EnemyClass, StarterEnemy, CurrentSpawnInterval);
+			}
+		}
+	}
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Yellow,
+			FString::Printf(TEXT("Wave %d  HP x%.2f  DMG x%.2f  interval %.2fs"),
+				GS->WaveNumber, GS->EnemyHealthScale, GS->EnemyDamageScale, CurrentSpawnInterval));
+	}
+}
+
+void ATdGameMode::SetSelectedDefenderIndex(int32 Index)
+{
+	if (ATdGameState* GS = GetGameState<ATdGameState>())
+	{
+		const int32 MaxIndex = FMath::Max(0, DefenderRoster.Num() - 1);
+		GS->SelectedDefenderIndex = FMath::Clamp(Index, 0, MaxIndex);
+	}
+}
+
+UDefenderData* ATdGameMode::GetSelectedDefenderData() const
+{
+	if (ATdGameState* GS = GetGameState<ATdGameState>())
+	{
+		if (DefenderRoster.IsValidIndex(GS->SelectedDefenderIndex))
+		{
+			return DefenderRoster[GS->SelectedDefenderIndex];
+		}
+	}
+	return StarterDefender;
 }

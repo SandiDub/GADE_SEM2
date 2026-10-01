@@ -75,6 +75,10 @@ struct GADE_SEM2_API FTdSlotData
 	/** World Z of the slot. Feed this into defender range for the complexity mark. */
 	UPROPERTY(BlueprintReadWrite)
 	float HeightAdvantage = 0.f;
+
+	/** Which generated path this slot guards. Drives the per-lane quota and HUD coverage. */
+	UPROPERTY(BlueprintReadWrite)
+	int32 PathIndex = INDEX_NONE;
 };
 
 USTRUCT(BlueprintType)
@@ -111,4 +115,69 @@ struct GADE_SEM2_API FGeneratedMap
 
 	UPROPERTY(BlueprintReadOnly)
 	TArray<FTransform> SpawnTransforms;
+};
+
+/**
+ * Everything a UMG widget needs, in one BlueprintPure call.
+ * Bind widget fields to ATdGameState::GetHudSnapshot() instead of
+ * reaching into GameMode/actors from Blueprint.
+ */
+USTRUCT(BlueprintType)
+struct GADE_SEM2_API FTdHudSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 Gold = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 NextDefenderCost = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	bool bCanAffordNext = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	FText SelectedDefenderName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 WaveNumber = 0;
+
+	/** 0..1 progress to the next wave. Drive a progress bar with this. */
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	float WaveProgress = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	float TowerHealthPercent = 1.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 DefendersAlive = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 SlotsTotal = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 EnemiesAlive = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 Kills = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 Leaks = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	float MatchTime = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	int32 Seed = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	ETdMatchState MatchState = ETdMatchState::Waiting;
+
+	/** Defenders currently guarding each generated path, indexed by path. */
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	TArray<int32> LaneDefenders;
+
+	/** Slots that exist on each generated path, indexed by path. */
+	UPROPERTY(BlueprintReadOnly, Category = "Td|HUD")
+	TArray<int32> LaneSlots;
 };

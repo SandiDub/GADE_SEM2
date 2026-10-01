@@ -77,3 +77,24 @@ void AEnemySpawner::SpawnOne()
 	// Set the NEW timer 
 	GetWorld()->GetTimerManager().SetTimer(SpawnTimer, this, &AEnemySpawner::SpawnOne, CurrentSpawnRate, false);
 }
+
+void AEnemySpawner::SpawnNow(UEnemyData* Data)
+{
+	if (!CachedEnemyClass || !GetWorld() || !Data)
+	{
+		return;
+	}
+
+	CachedData = Data;
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	const FVector Loc = Path.Waypoints.Num() > 0 ? Path.Waypoints[0] : GetActorLocation();
+	AEnemy* Enemy = GetWorld()->SpawnActor<AEnemy>(CachedEnemyClass, Loc, FRotator::ZeroRotator, Params);
+	if (Enemy)
+	{
+		Enemy->ApplyData(Data);
+		Enemy->SetPath(Path);
+	}
+}

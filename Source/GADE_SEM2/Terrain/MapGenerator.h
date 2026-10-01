@@ -42,6 +42,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Terrain", meta = (ClampMin = "1"))
 	int32 MaxSlots = 12;
 
+	/** Each generated path is guaranteed this many slots before the cap is shared out. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Terrain", meta = (ClampMin = "1"))
+	int32 MinSlotsPerPath = 3;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Terrain")
 	bool bDrawDebug = true;
 

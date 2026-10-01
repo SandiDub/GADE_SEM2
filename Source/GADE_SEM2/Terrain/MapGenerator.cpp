@@ -48,8 +48,19 @@ void AMapGenerator::GenerateWorld(int32 Seed)
 		DrawDebugOverlay();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Td: generated map seed %d  paths %d  slots %d"),
-		Map.Seed, Map.Paths.Num(), Map.Slots.Num());
+	FString LaneReport;
+	for (int32 P = 0; P < Map.Paths.Num(); ++P)
+	{
+		int32 Count = 0;
+		for (const FTdSlotData& Slot : Map.Slots)
+		{
+			if (Slot.PathIndex == P) { ++Count; }
+		}
+		LaneReport += FString::Printf(TEXT(" lane%d=%d"), P, Count);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Td: generated map seed %d  paths %d  slots %d |%s"),
+		Map.Seed, Map.Paths.Num(), Map.Slots.Num(), *LaneReport);
 }
 
 void AMapGenerator::ClearPreviousGeneration()
@@ -133,17 +144,26 @@ void AMapGenerator::DrawDebugOverlay() const
 
 	const float Life = 20.f;
 
-	for (const FTdPath& Path : Map.Paths)
+	// One colour per lane so the even slot spread is visible on camera.
+	const FColor LaneColors[] = { FColor::Cyan, FColor::Magenta, FColor::Orange, FColor::Green, FColor::Purple };
+	const int32 LaneColorNum = UE_ARRAY_COUNT(LaneColors);
+
+	for (int32 P = 0; P < Map.Paths.Num(); ++P)
 	{
+		const FColor LaneColor = LaneColors[P % LaneColorNum];
+		const FTdPath& Path = Map.Paths[P];
 		for (int32 i = 1; i < Path.Waypoints.Num(); ++i)
 		{
-			DrawDebugLine(World, Path.Waypoints[i - 1], Path.Waypoints[i], FColor::Cyan, false, Life, 0, 6.f);
+			DrawDebugLine(World, Path.Waypoints[i - 1], Path.Waypoints[i], LaneColor, false, Life, 0, 6.f);
 		}
 	}
 
 	for (const FTdSlotData& Slot : Map.Slots)
 	{
-		DrawDebugSphere(World, Slot.WorldTransform.GetLocation() + FVector(0, 0, 40.f), 30.f, 8, FColor::Yellow, false, Life, 0, 2.f);
+		const FColor SlotColor = Map.Paths.IsValidIndex(Slot.PathIndex)
+			? LaneColors[Slot.PathIndex % LaneColorNum]
+			: FColor::Yellow;
+		DrawDebugSphere(World, Slot.WorldTransform.GetLocation() + FVector(0, 0, 40.f), 30.f, 8, SlotColor, false, Life, 0, 2.f);
 	}
 
 	DrawDebugBox(World, Map.TowerTransform.GetLocation() + FVector(0, 0, 80.f), FVector(60.f), FColor::White, false, Life, 0, 3.f);
@@ -581,8 +601,28 @@ void AMapGenerator::ExtractSlots()
 {
 	Map.Slots.Reset();
 
-	TArray<FTdGridCoord> Candidates;
+	const int32 PathNum = Map.Paths.Num();
+	if (PathNum == 0)
+	{
+		return;
+	}
+
+	// A junction cell near the hub sits on several paths, so store every owner.
+	TMap<FTdGridCoord, TArray<int32>> CellToPaths;
+	for (int32 P = 0; P < PathNum; ++P)
+	{
+		for (const FTdGridCoord& C : Map.Paths[P].Cells)
+		{
+			CellToPaths.FindOrAdd(C).AddUnique(P);
+		}
+	}
+
+	// One candidate bucket per path. A candidate beside a junction lands in each owner bucket.
+	TArray<TArray<FTdGridCoord>> Buckets;
+	Buckets.SetNum(PathNum);
+
 	TArray<FTdGridCoord> Neighbours;
+	TArray<int32> Owners;
 
 	for (int32 Y = 0; Y < Resolution; ++Y)
 	{
@@ -594,58 +634,99 @@ void AMapGenerator::ExtractSlots()
 				continue;
 			}
 
-			bool bTouchesPath = false;
+			Owners.Reset();
 			TdGrid::Neighbours4(C, Resolution, Neighbours);
 			for (const FTdGridCoord& N : Neighbours)
 			{
-				if (GetTag(N) == ETdCellTag::Path)
+				if (const TArray<int32>* Paths = CellToPaths.Find(N))
 				{
-					bTouchesPath = true;
-					break;
+					for (int32 P : *Paths)
+					{
+						Owners.AddUnique(P);
+					}
 				}
 			}
-			if (bTouchesPath)
+
+			for (int32 P : Owners)
 			{
-				Candidates.Add(C);
+				Buckets[P].Add(C);
 			}
 		}
 	}
 
 	FRandomStream SlotRng(Map.Seed ^ 0x51C07);
-	for (int32 i = Candidates.Num() - 1; i > 0; --i)
+	for (TArray<FTdGridCoord>& Bucket : Buckets)
 	{
-		Candidates.Swap(i, SlotRng.RandRange(0, i));
+		for (int32 i = Bucket.Num() - 1; i > 0; --i)
+		{
+			Bucket.Swap(i, SlotRng.RandRange(0, i));
+		}
 	}
 
 	const int32 Spacing = FMath::Max(1, SlotSpacing);
-	for (const FTdGridCoord& C : Candidates)
-	{
-		if (Map.Slots.Num() >= MaxSlots)
-		{
-			break;
-		}
+	TSet<FTdGridCoord> Taken;
 
-		bool bTooClose = false;
+	auto TryPlace = [&](int32 PathIndex, const FTdGridCoord& C) -> bool
+	{
+		if (Taken.Contains(C))
+		{
+			return false;
+		}
 		for (const FTdSlotData& Existing : Map.Slots)
 		{
 			const int32 Dx = FMath::Abs(Existing.Cell.X - C.X);
 			const int32 Dy = FMath::Abs(Existing.Cell.Y - C.Y);
 			if (FMath::Max(Dx, Dy) < Spacing)
 			{
-				bTooClose = true;
-				break;
+				return false;
 			}
-		}
-		if (bTooClose)
-		{
-			continue;
 		}
 
 		FTdSlotData Slot;
 		Slot.Cell = C;
+		Slot.PathIndex = PathIndex;
 		Slot.WorldTransform = FTransform(GetCellWorld(C));
 		Slot.HeightAdvantage = GetHeight(C) - GetHeight(Map.TowerCell);
 		Map.Slots.Add(Slot);
+		Taken.Add(C);
+		return true;
+	};
+
+	// Round-robin across paths so no lane can be over-slotted while another has none.
+	const int32 Quota = FMath::Max(1, MinSlotsPerPath);
+	TArray<int32> Cursor;
+	Cursor.SetNumZeroed(PathNum);
+
+	for (int32 Round = 0; Round < Quota; ++Round)
+	{
+		for (int32 P = 0; P < PathNum; ++P)
+		{
+			while (Cursor[P] < Buckets[P].Num())
+			{
+				if (TryPlace(P, Buckets[P][Cursor[P]++]))
+				{
+					break;
+				}
+			}
+		}
+	}
+
+	// Spend any remaining cap, still alternating lanes.
+	bool bProgress = true;
+	while (Map.Slots.Num() < MaxSlots && bProgress)
+	{
+		bProgress = false;
+		for (int32 P = 0; P < PathNum && Map.Slots.Num() < MaxSlots; ++P)
+		{
+			while (Cursor[P] < Buckets[P].Num())
+			{
+				if (TryPlace(P, Buckets[P][Cursor[P]++]))
+				{
+					bProgress = true;
+					break;
+				}
+			}
+		}
 	}
 }
 

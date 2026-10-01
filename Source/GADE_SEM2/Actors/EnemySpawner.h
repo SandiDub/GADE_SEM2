@@ -24,6 +24,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Td")
 	void StopSpawning();
 
+	/** Director calls this. Does not start a self-timer. */
+	UFUNCTION(BlueprintCallable, Category = "Td")
+	void SpawnNow(UEnemyData* Data);
+
+	void SetEnemyClass(TSubclassOf<AEnemy> InClass) { CachedEnemyClass = InClass; }
+
+	const FTdPath& GetPath() const { return Path; }
+
 protected:
 	void SpawnOne();
 

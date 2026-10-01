@@ -34,6 +34,9 @@ void ADefender::ApplyData(UDefenderData* Data)
 		return;
 	}
 
+	CachedData = Data;
+	CachedBehaviour = Data->Behaviour;
+
 	Health->MaxHealth = Data->MaxHealth;
 	Health->ResetHealth();
 	AutoAttack->Damage = Data->Damage;
@@ -48,8 +51,10 @@ void ADefender::ApplyData(UDefenderData* Data)
 
 void ADefender::ApplyHeightAdvantage(float HeightAdvantage)
 {
-	// High ground = extra range. This is the complexity hook: generation changes tactics.
-	AutoAttack->RangeBonus = HeightAdvantage * HeightToRangeScale;
+	// High ground = extra range. Clamped so a ridge slot cannot cover every lane at once,
+	// which is what let a single well-placed defender trivialise the map.
+	const float Bonus = FMath::Max(0.f, HeightAdvantage) * HeightToRangeScale;
+	AutoAttack->RangeBonus = FMath::Clamp(Bonus, 0.f, MaxRangeBonus);
 }
 void ADefender::HandleDeath()
 {

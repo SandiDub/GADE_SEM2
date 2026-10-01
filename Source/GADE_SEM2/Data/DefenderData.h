@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Wave/WaveTypes.h"
 #include "DefenderData.generated.h"
 
 class UStaticMesh;
@@ -34,4 +35,16 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender")
 	TObjectPtr<UStaticMesh> Mesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender")
+	ETdDefenderBehaviour Behaviour = ETdDefenderBehaviour::Gunner;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender")
+	float SplashRadius = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender")
+	float SlowMultiplier = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender")
+	float SlowDuration = 0.f;
 };

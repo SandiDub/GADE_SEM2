@@ -7,6 +7,7 @@
 #include "Combat/HealthComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/Engine.h"
 
 ADefenderSlot::ADefenderSlot()
 {
@@ -35,7 +36,11 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
 
     if (!GM || !GS) return false;
 
-    UDefenderData* Data = GM->StarterDefender;
+    UDefenderData* Data = GM->GetSelectedDefenderData();
+    if (!Data)
+    {
+        Data = GM->StarterDefender;
+    }
     if (!Data)
     {
         UE_LOG(LogTemp, Warning, TEXT("Td: Assign StarterDefender on BP_TdGameMode!"));
@@ -48,15 +53,20 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
         return false;
     }
 
-    //If GS cannot afford Data->Cost, return false
-    if (!GS->CanAfford(Data->Cost))
+    // Cost escalates with every defender bought, so spamming turrets is a real decision.
+    const int32 Price = GM->GetNextDefenderCost();
+    if (!GS->CanAfford(Price))
     {
-        UE_LOG(LogTemp, Warning, TEXT("Td: Not enough gold!"));
+        UE_LOG(LogTemp, Warning, TEXT("Td: Not enough gold (need %d, have %d)."), Price, GS->Gold);
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Red,
+                FString::Printf(TEXT("Need %d gold"), Price));
+        }
         return false;
     }
 
-    //Spend the gold
-    GS->TrySpendGold(Data->Cost);
+    GS->TrySpendGold(Price);
 
     //Spawn the Blueprint version of the Defender
     FActorSpawnParameters SpawnParams;
@@ -79,6 +89,7 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
             MarkerMesh->SetVisibility(false,true);
         }
         bOccupied = true;
+        GM->NotifyDefenderPurchased();
 
         return true;
     }

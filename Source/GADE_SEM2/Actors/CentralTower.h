@@ -34,4 +34,9 @@ protected:
 
 	UFUNCTION()
 	void HandleDeath();
+
+	UFUNCTION()
+	void HandleHealthChanged(float Current, float Max);
+
+	float LastHealth = 0.f;
 };

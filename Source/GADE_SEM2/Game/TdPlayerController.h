@@ -39,4 +39,9 @@ protected:
 	void HandleClick(const FInputActionValue& Value);
 	void HandlePause(const FInputActionValue& Value);
 	void HandlePan(const FInputActionValue& Value);
+
+	void SelectDefenderSlot(int32 Index);
+	void SelectDefender0() { SelectDefenderSlot(0); }
+	void SelectDefender1() { SelectDefenderSlot(1); }
+	void SelectDefender2() { SelectDefenderSlot(2); }
 };

@@ -7,6 +7,8 @@
 #include "InputActionValue.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "InputCoreTypes.h"
+#include "Engine/Engine.h"
 
 ATdPlayerController::ATdPlayerController()
 {
@@ -63,6 +65,13 @@ void ATdPlayerController::SetupInputComponent()
 	{
 		EIC->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &ATdPlayerController::HandleZoom);
 	}
+
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ATdPlayerController::SelectDefender0);
+		InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ATdPlayerController::SelectDefender1);
+		InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ATdPlayerController::SelectDefender2);
+	}
 }
 
 void ATdPlayerController::HandleClick(const FInputActionValue& Value)
@@ -108,6 +117,19 @@ void ATdPlayerController::HandleZoom(const FInputActionValue& Value)
 	if (ATdPawn* TdPawn = Cast<ATdPawn>(GetPawn()))
 	{
 		TdPawn->Zoom(Value.Get<float>());
+	}
+}
+
+void ATdPlayerController::SelectDefenderSlot(int32 Index)
+{
+	if (ATdGameMode* GM = Cast<ATdGameMode>(UGameplayStatics::GetGameMode(this)))
+	{
+		GM->SetSelectedDefenderIndex(Index);
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Green,
+				FString::Printf(TEXT("Selected defender %d"), Index + 1));
+		}
 	}
 }
 
