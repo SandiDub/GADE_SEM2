@@ -25,6 +25,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Td|Waves")
 	float WaveInterval = 12.f;
 
+	UPROPERTY(EditAnywhere, Category = "Td|Waves", meta = (ClampMin = "0.05"))
+	float SpawnStagger = 0.6f;
+
 	UPROPERTY(EditAnywhere, Category = "Td|Waves")
 	float BaseBudget = 30.f;
 
@@ -64,4 +67,11 @@ protected:
 	int32 WaveIndex = 0;
 	float LastBudget = 0.f;
 	ETdPlayStyle LastStyle = ETdPlayStyle::Unknown;
+
+	UFUNCTION()
+	void SpawnNextPending();
+
+	TArray<FTdWaveSpawn> PendingSpawns;
+	int32 PendingIndex = 0;
+	FTimerHandle StaggerTimer;
 };

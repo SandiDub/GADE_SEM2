@@ -48,6 +48,8 @@ void AWaveDirector::StopMatch()
 	{
 		if (S) { S->StopSpawning(); }
 	}
+
+	GetWorld()->GetTimerManager().ClearTimer(StaggerTimer);
 }
 
 void AWaveDirector::OnWaveTimer()
@@ -140,7 +142,7 @@ ETdPlayStyle AWaveDirector::ClassifyStyle(const FTdPlayerTelemetry& T) const
 	int32 SecondLane = 0;
 	int32 LanesWithOne = 0;
 	int32 LanesWithThreePlus = 0;
-	int32 EmptyLanes = 0;
+	
 
 	for (const FTdLaneCoverage& Lane : T.Lanes)
 	{
@@ -155,12 +157,12 @@ ETdPlayStyle AWaveDirector::ClassifyStyle(const FTdPlayerTelemetry& T) const
 			SecondLane = C;
 		}
 
-		if (C == 0) { ++EmptyLanes; }
+		//if (C == 0) { ++EmptyLanes; }
 		if (C == 1) { ++LanesWithOne; }
 		if (C >= 3) { ++LanesWithThreePlus; }
 	}
 
-	(void)EmptyLanes;
+	
 
 	// Spatial turtle: one generated path holds at least twice the next lane.
 	if (MaxLane >= 2 && MaxLane >= 2 * SecondLane)
@@ -214,7 +216,7 @@ float AWaveDirector::ComputeBudget(const FTdPlayerTelemetry& T) const
 		// Stomping: raise budget with spend and kills so challenge stays consistent.
 		const float Stomp = FMath::Clamp(
 			(static_cast<float>(T.GoldSpent) / 250.f) + (static_cast<float>(T.Kills) / 30.f),
-			0.15f, 0.45f);
+			0.0f, 0.45f);
 		SkillModifier = Baseline * Stomp;
 	}
 
@@ -292,7 +294,15 @@ void AWaveDirector::ComposeWave(float Budget, const FTdPlayerTelemetry& T, TArra
 	while (Remaining + 0.01f >= Cheapest && Guard-- > 0)
 	{
 		const float Sum = WGrunt + WRunner + WBruiser;
-		float Roll = FMath::FRandRange(0.f, FMath::Max(Sum, 0.001f));
+
+		int32 Seed = 0;
+		if (const ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
+		{
+			Seed = GS->Seed;
+		} 
+
+		FRandomStream Rng(Seed ^ (WaveIndex * 7919));
+		float Roll = Rng.FRandRange(0.f, FMath::Max(Sum, 0.001f));
 
 		UEnemyData* Pick = Grunt;
 		ETdEnemyBehaviour Type = ETdEnemyBehaviour::Grunt;
@@ -383,13 +393,38 @@ int32 AWaveDirector::PickPath(const FTdPlayerTelemetry& T, ETdEnemyBehaviour For
 
 void AWaveDirector::Dispatch(const TArray<FTdWaveSpawn>& Wave)
 {
-	for (const FTdWaveSpawn& S : Wave)
+	PendingSpawns = Wave;
+	PendingIndex = 0;
+
+	UWorld* World = GetWorld();
+	if (!World || PendingSpawns.Num() == 0) return;
+
+	World->GetTimerManager().ClearTimer(StaggerTimer);
+
+	// Never let one wave bleed into the next.
+	const float Stagger = FMath::Min(SpawnStagger, WaveInterval / static_cast<float>(PendingSpawns.Num() + 1));
+
+	SpawnNextPending();
+	if (PendingSpawns.Num() > 1)
 	{
-		if (!S.Enemy || !Spawners.IsValidIndex(S.PathIndex) || !Spawners[S.PathIndex])
+		World->GetTimerManager().SetTimer(StaggerTimer, this, &AWaveDirector::SpawnNextPending, Stagger, true);
+	}
+}
+
+void AWaveDirector::SpawnNextPending()
+{
+	if (!PendingSpawns.IsValidIndex(PendingIndex))
+	{
+		if (UWorld* World = GetWorld())
 		{
-			continue;
+			World->GetTimerManager().ClearTimer(StaggerTimer);
 		}
-		// Requires EnemySpawner::SpawnNow(UEnemyData*) — see MERGE notes.
+		return;
+	}
+
+	const FTdWaveSpawn& S = PendingSpawns[PendingIndex++];
+	if (S.Enemy && Spawners.IsValidIndex(S.PathIndex) && Spawners[S.PathIndex])
+	{
 		Spawners[S.PathIndex]->SpawnNow(S.Enemy);
 	}
 }
