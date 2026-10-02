@@ -9,7 +9,7 @@ public class GADE_SEM2Target : TargetRules
 	{
 		Type = TargetType.Game;
         DefaultBuildSettings = BuildSettingsVersion.V7;
-        IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
+		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
 
         ExtraModuleNames.AddRange( new string[] { "GADE_SEM2" } );
 	}

@@ -10,6 +10,7 @@ public class GADE_SEM2EditorTarget : TargetRules
 		Type = TargetType.Editor;
         DefaultBuildSettings = BuildSettingsVersion.V7;
         IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
+        bOverrideBuildEnvironment = true;
 
         ExtraModuleNames.AddRange( new string[] { "GADE_SEM2" } );
 	}
