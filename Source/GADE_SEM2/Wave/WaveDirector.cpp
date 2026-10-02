@@ -134,71 +134,251 @@ void AWaveDirector::CollectTelemetry(FTdPlayerTelemetry& Out) const
 
 ETdPlayStyle AWaveDirector::ClassifyStyle(const FTdPlayerTelemetry& T) const
 {
-	// TODO: match your document.
-	// OneLane: max(Lane.DefenderCount) >= 2 * second-max, and max >= 2
-	// CheapSpam: Gunners high, Mortars == 0, total defenders >= 4
-	// MortarNest: Mortars >= Gunners && Mortars >= 1
-	// SpreadThin: at least 2 lanes with 1 defender and none with 3+
-	(void)T;
+	const int32 Total = T.Gunners + T.Frosts + T.Mortars;
+
+	int32 MaxLane = 0;
+	int32 SecondLane = 0;
+	int32 LanesWithOne = 0;
+	int32 LanesWithThreePlus = 0;
+	int32 EmptyLanes = 0;
+
+	for (const FTdLaneCoverage& Lane : T.Lanes)
+	{
+		const int32 C = Lane.DefenderCount;
+		if (C > MaxLane)
+		{
+			SecondLane = MaxLane;
+			MaxLane = C;
+		}
+		else if (C > SecondLane)
+		{
+			SecondLane = C;
+		}
+
+		if (C == 0) { ++EmptyLanes; }
+		if (C == 1) { ++LanesWithOne; }
+		if (C >= 3) { ++LanesWithThreePlus; }
+	}
+
+	(void)EmptyLanes;
+
+	// Spatial turtle: one generated path holds at least twice the next lane.
+	if (MaxLane >= 2 && MaxLane >= 2 * SecondLane)
+	{
+		return ETdPlayStyle::OneLane;
+	}
+
+	// Mix: mortars dominate (slow splash, weak vs runners).
+	if (T.Mortars >= 1 && T.Mortars >= T.Gunners)
+	{
+		return ETdPlayStyle::MortarNest;
+	}
+
+	// Cheap gunner clumps without splash coverage.
+	if (Total >= 4 && T.Mortars == 0 && T.Gunners >= FMath::Max(3, T.Frosts + 1))
+	{
+		return ETdPlayStyle::CheapSpam;
+	}
+
+	if (LanesWithOne >= 2 && LanesWithThreePlus == 0)
+	{
+		return ETdPlayStyle::SpreadThin;
+	}
+
 	return ETdPlayStyle::Unknown;
 }
 
 float AWaveDirector::ComputeBudget(const FTdPlayerTelemetry& T) const
 {
-	// TODO (yours): finish the rubber-band described in your planning document.
-	// Baseline growth is wired so pressure already climbs wave over wave.
-	// Still to add: ease off when T.Pressure is high, push when the player stomps.
-	float Budget = BaseBudget;
+	// ThreatBudget = Base + (TimeGrowth * MatchTime) + SkillModifier
+	const float MatchTime = (GetWorld() && GetWorld()->GetGameState<ATdGameState>())
+		? GetWorld()->GetGameState<ATdGameState>()->MatchTime
+		: 0.f;
 
-	if (const ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
+	const float Baseline = BaseBudget + (BudgetPerSecond * MatchTime);
+
+	const bool bLeaking = T.Leaks > 0;
+	const bool bHighPressure = T.Pressure >= 0.2f;
+	float SkillModifier = 0.f;
+
+	if (bLeaking || bHighPressure)
 	{
-		Budget += BudgetPerSecond * GS->MatchTime;
-		Budget *= FMath::Max(1.f, GS->EnemyHealthScale * 0.5f + 0.5f);
+		// Ease off 20–35% so a struggling player is not steamrolled.
+		const float LeakStress = FMath::Clamp(static_cast<float>(T.Leaks) / 4.f, 0.f, 1.f);
+		const float Stress = FMath::Clamp(FMath::Max(T.Pressure, LeakStress), 0.f, 1.f);
+		const float Slash = FMath::Lerp(0.20f, 0.35f, Stress);
+		SkillModifier = -Baseline * Slash;
+	}
+	else if (T.TowerHealthNorm >= 0.7f && T.Pressure < 0.1f)
+	{
+		// Stomping: raise budget with spend and kills so challenge stays consistent.
+		const float Stomp = FMath::Clamp(
+			(static_cast<float>(T.GoldSpent) / 250.f) + (static_cast<float>(T.Kills) / 30.f),
+			0.15f, 0.45f);
+		SkillModifier = Baseline * Stomp;
 	}
 
-	(void)T;
-	return FMath::Max(BaseBudget, Budget);
+	return FMath::Max(8.f, Baseline + SkillModifier);
 }
 
 void AWaveDirector::ComposeWave(float Budget, const FTdPlayerTelemetry& T, TArray<FTdWaveSpawn>& Out) const
 {
 	Out.Reset();
 
-	// TODO: spend Budget using EnemyData->ThreatCost.
-	// Default fill: Grunts.
-	// If style is OneLane or MortarNest: raise Runner weight, PickPath(Runner)
-	//   should return the emptiest lane.
-	// If style is CheapSpam: raise Bruiser weight.
-	// If Pressure high: fewer elites (your rubber-band paragraph).
-	//
-	// Fallback so the game still plays while you write the real mixer:
+	UEnemyData* Grunt = nullptr;
+	UEnemyData* Runner = nullptr;
+	UEnemyData* Bruiser = nullptr;
 	UEnemyData* Fallback = nullptr;
+
 	for (UEnemyData* E : EnemyRoster)
 	{
-		if (E) { Fallback = E; break; }
+		if (!E) { continue; }
+		if (!Fallback) { Fallback = E; }
+		switch (E->Behaviour)
+		{
+		case ETdEnemyBehaviour::Runner:  if (!Runner) { Runner = E; } break;
+		case ETdEnemyBehaviour::Bruiser: if (!Bruiser) { Bruiser = E; } break;
+		default: if (!Grunt) { Grunt = E; } break;
+		}
 	}
-	if (!Fallback) { return; }
 
-	int32 Remaining = FMath::Max(1, FMath::RoundToInt(Budget / 10.f));
-	for (int32 i = 0; i < Remaining; ++i)
+	if (!Grunt) { Grunt = Fallback; }
+	if (!Grunt) { return; }
+
+	bool bHasEmptyLane = false;
+	for (const FTdLaneCoverage& Lane : T.Lanes)
 	{
-		FTdWaveSpawn S;
-		S.Enemy = Fallback;
-		S.PathIndex = PickPath(T, ETdEnemyBehaviour::Grunt);
-		Out.Add(S);
+		if (Lane.DefenderCount <= 0)
+		{
+			bHasEmptyLane = true;
+			break;
+		}
+	}
+
+	// Default mix: Grunts carry the wave. Style and empty lanes shift elites.
+	float WGrunt = 1.0f;
+	float WRunner = 0.15f;
+	float WBruiser = 0.15f;
+
+	if (T.Style == ETdPlayStyle::OneLane || T.Style == ETdPlayStyle::MortarNest || bHasEmptyLane)
+	{
+		WRunner += 0.85f;
+	}
+	if (T.Style == ETdPlayStyle::CheapSpam)
+	{
+		WBruiser += 0.9f;
+	}
+	if (T.Pressure >= 0.25f || T.Leaks > 0)
+	{
+		WRunner *= 0.45f;
+		WBruiser *= 0.3f;
+	}
+
+	if (!Runner) { WRunner = 0.f; }
+	if (!Bruiser) { WBruiser = 0.f; }
+
+	auto CostOf = [](UEnemyData* E) -> float
+	{
+		return (E && E->ThreatCost > 0) ? static_cast<float>(E->ThreatCost) : 10.f;
+	};
+
+	const float Cheapest = FMath::Min3(CostOf(Grunt),
+		Runner ? CostOf(Runner) : TNumericLimits<float>::Max(),
+		Bruiser ? CostOf(Bruiser) : TNumericLimits<float>::Max());
+
+	float Remaining = FMath::Max(Cheapest, Budget);
+	int32 Guard = 64;
+
+	while (Remaining + 0.01f >= Cheapest && Guard-- > 0)
+	{
+		const float Sum = WGrunt + WRunner + WBruiser;
+		float Roll = FMath::FRandRange(0.f, FMath::Max(Sum, 0.001f));
+
+		UEnemyData* Pick = Grunt;
+		ETdEnemyBehaviour Type = ETdEnemyBehaviour::Grunt;
+
+		if ((Roll -= WRunner) <= 0.f && Runner)
+		{
+			Pick = Runner;
+			Type = ETdEnemyBehaviour::Runner;
+		}
+		else if ((Roll -= WBruiser) <= 0.f && Bruiser)
+		{
+			Pick = Bruiser;
+			Type = ETdEnemyBehaviour::Bruiser;
+		}
+
+		if (CostOf(Pick) > Remaining + 0.01f)
+		{
+			if (CostOf(Grunt) <= Remaining + 0.01f)
+			{
+				Pick = Grunt;
+				Type = ETdEnemyBehaviour::Grunt;
+			}
+			else
+			{
+				break;
+			}
+		}
+
+		FTdWaveSpawn Spawn;
+		Spawn.Enemy = Pick;
+		Spawn.PathIndex = PickPath(T, Type);
+		Out.Add(Spawn);
+		Remaining -= CostOf(Pick);
 	}
 }
 
 int32 AWaveDirector::PickPath(const FTdPlayerTelemetry& T, ETdEnemyBehaviour ForType) const
 {
-	if (Spawners.Num() == 0) { return 0; }
+	const int32 PathCount = Spawners.Num();
+	if (PathCount <= 0)
+	{
+		return 0;
+	}
 
-	// TODO: Runners -> argmin LaneCoverage
-	// Bruisers -> argmax LaneCoverage (hit the stack)
-	// Grunts -> round-robin or least-recently-used path
-	(void)T;
-	(void)ForType;
-	return WaveIndex % Spawners.Num();
+	auto Coverage = [&T, PathCount](int32 Index) -> int32
+	{
+		if (T.Lanes.IsValidIndex(Index))
+		{
+			return T.Lanes[Index].DefenderCount;
+		}
+		return 0;
+	};
+
+	if (ForType == ETdEnemyBehaviour::Runner)
+	{
+		int32 Best = 0;
+		int32 BestCount = Coverage(0);
+		for (int32 i = 1; i < PathCount; ++i)
+		{
+			const int32 C = Coverage(i);
+			if (C < BestCount || (C == BestCount && (i % FMath::Max(1, PathCount)) == (WaveIndex % PathCount)))
+			{
+				BestCount = C;
+				Best = i;
+			}
+		}
+		return Best;
+	}
+
+	if (ForType == ETdEnemyBehaviour::Bruiser)
+	{
+		int32 Best = 0;
+		int32 BestCount = Coverage(0);
+		for (int32 i = 1; i < PathCount; ++i)
+		{
+			const int32 C = Coverage(i);
+			if (C > BestCount)
+			{
+				BestCount = C;
+				Best = i;
+			}
+		}
+		return Best;
+	}
+
+	return WaveIndex % PathCount;
 }
 
 void AWaveDirector::Dispatch(const TArray<FTdWaveSpawn>& Wave)
