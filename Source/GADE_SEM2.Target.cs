@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 using UnrealBuildTool;
 using System.Collections.Generic;
 
@@ -8,7 +6,7 @@ public class GADE_SEM2Target : TargetRules
 	public GADE_SEM2Target(TargetInfo Target) : base(Target)
 	{
 		Type = TargetType.Game;
-        DefaultBuildSettings = BuildSettingsVersion.V7;
+        DefaultBuildSettings = BuildSettingsVersion.Latest;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
 
         ExtraModuleNames.AddRange( new string[] { "GADE_SEM2" } );
