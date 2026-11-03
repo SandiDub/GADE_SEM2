@@ -43,17 +43,31 @@ void AWaveDirector::StopMatch()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(WaveTimer);
+		World->GetTimerManager().ClearTimer(StaggerTimer);
 	}
+	PendingSpawns.Reset();
+	PendingIndex = 0;
+
 	for (AEnemySpawner* S : Spawners)
 	{
 		if (S) { S->StopSpawning(); }
 	}
+}
 
-	GetWorld()->GetTimerManager().ClearTimer(StaggerTimer);
+void AWaveDirector::ReseedWaveRng()
+{
+	int32 Seed = WaveIndex + 1;
+	if (const ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
+	{
+		Seed = GS->Seed;
+	}
+	WaveRng.Initialize(Seed ^ (WaveIndex * 7919 + 104729));
 }
 
 void AWaveDirector::OnWaveTimer()
 {
+	ReseedWaveRng();
+
 	FTdPlayerTelemetry T;
 	CollectTelemetry(T);
 	LastStyle = ClassifyStyle(T);
@@ -142,7 +156,7 @@ ETdPlayStyle AWaveDirector::ClassifyStyle(const FTdPlayerTelemetry& T) const
 	int32 SecondLane = 0;
 	int32 LanesWithOne = 0;
 	int32 LanesWithThreePlus = 0;
-	
+	int32 EmptyLanes = 0;
 
 	for (const FTdLaneCoverage& Lane : T.Lanes)
 	{
@@ -157,15 +171,15 @@ ETdPlayStyle AWaveDirector::ClassifyStyle(const FTdPlayerTelemetry& T) const
 			SecondLane = C;
 		}
 
-		//if (C == 0) { ++EmptyLanes; }
+		if (C == 0) { ++EmptyLanes; }
 		if (C == 1) { ++LanesWithOne; }
 		if (C >= 3) { ++LanesWithThreePlus; }
 	}
 
-	
-
-	// Spatial turtle: one generated path holds at least twice the next lane.
-	if (MaxLane >= 2 && MaxLane >= 2 * SecondLane)
+	// One-lane turtle: stacked path, or a stack plus at least one generated path left empty.
+	const bool bStacked = MaxLane >= 2 && MaxLane >= 2 * SecondLane;
+	const bool bLeftLanesOpen = MaxLane >= 2 && EmptyLanes >= 1;
+	if (bStacked || bLeftLanesOpen)
 	{
 		return ETdPlayStyle::OneLane;
 	}
@@ -223,7 +237,7 @@ float AWaveDirector::ComputeBudget(const FTdPlayerTelemetry& T) const
 	return FMath::Max(8.f, Baseline + SkillModifier);
 }
 
-void AWaveDirector::ComposeWave(float Budget, const FTdPlayerTelemetry& T, TArray<FTdWaveSpawn>& Out) const
+void AWaveDirector::ComposeWave(float Budget, const FTdPlayerTelemetry& T, TArray<FTdWaveSpawn>& Out)
 {
 	Out.Reset();
 
@@ -291,28 +305,32 @@ void AWaveDirector::ComposeWave(float Budget, const FTdPlayerTelemetry& T, TArra
 	float Remaining = FMath::Max(Cheapest, Budget);
 	int32 Guard = 64;
 
+	const bool bFlankWithRunners =
+		Runner && (T.Style == ETdPlayStyle::OneLane || T.Style == ETdPlayStyle::MortarNest || bHasEmptyLane);
+	if (bFlankWithRunners && Remaining + 0.01f >= CostOf(Runner))
+	{
+		FTdWaveSpawn Flank;
+		Flank.Enemy = Runner;
+		Flank.PathIndex = PickPath(T, ETdEnemyBehaviour::Runner);
+		Out.Add(Flank);
+		Remaining -= CostOf(Runner);
+	}
+
 	while (Remaining + 0.01f >= Cheapest && Guard-- > 0)
 	{
 		const float Sum = WGrunt + WRunner + WBruiser;
-
-		int32 Seed = 0;
-		if (const ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
-		{
-			Seed = GS->Seed;
-		} 
-
-		FRandomStream Rng(Seed ^ (WaveIndex * 7919));
-		float Roll = Rng.FRandRange(0.f, FMath::Max(Sum, 0.001f));
+		const float Roll = WaveRng.FRandRange(0.f, FMath::Max(Sum, 0.001f));
 
 		UEnemyData* Pick = Grunt;
 		ETdEnemyBehaviour Type = ETdEnemyBehaviour::Grunt;
+		float Cursor = Roll;
 
-		if ((Roll -= WRunner) <= 0.f && Runner)
+		if ((Cursor -= WRunner) <= 0.f && Runner)
 		{
 			Pick = Runner;
 			Type = ETdEnemyBehaviour::Runner;
 		}
-		else if ((Roll -= WBruiser) <= 0.f && Bruiser)
+		else if ((Cursor -= WBruiser) <= 0.f && Bruiser)
 		{
 			Pick = Bruiser;
 			Type = ETdEnemyBehaviour::Bruiser;
@@ -363,7 +381,7 @@ int32 AWaveDirector::PickPath(const FTdPlayerTelemetry& T, ETdEnemyBehaviour For
 		for (int32 i = 1; i < PathCount; ++i)
 		{
 			const int32 C = Coverage(i);
-			if (C < BestCount || (C == BestCount && (i % FMath::Max(1, PathCount)) == (WaveIndex % PathCount)))
+			if (C < BestCount)
 			{
 				BestCount = C;
 				Best = i;
@@ -397,15 +415,23 @@ void AWaveDirector::Dispatch(const TArray<FTdWaveSpawn>& Wave)
 	PendingIndex = 0;
 
 	UWorld* World = GetWorld();
-	if (!World || PendingSpawns.Num() == 0) return;
+	if (!World)
+	{
+		return;
+	}
 
 	World->GetTimerManager().ClearTimer(StaggerTimer);
+	if (PendingSpawns.Num() == 0)
+	{
+		return;
+	}
 
-	// Never let one wave bleed into the next.
-	const float Stagger = FMath::Min(SpawnStagger, WaveInterval / static_cast<float>(PendingSpawns.Num() + 1));
+	// Sequential 1s gaps; compress only if the queue would overlap the next wave.
+	const float MaxFit = WaveInterval / static_cast<float>(PendingSpawns.Num() + 1);
+	const float Stagger = FMath::Clamp(SpawnStagger, 0.05f, FMath::Max(0.35f, MaxFit));
 
 	SpawnNextPending();
-	if (PendingSpawns.Num() > 1)
+	if (PendingSpawns.IsValidIndex(PendingIndex))
 	{
 		World->GetTimerManager().SetTimer(StaggerTimer, this, &AWaveDirector::SpawnNextPending, Stagger, true);
 	}

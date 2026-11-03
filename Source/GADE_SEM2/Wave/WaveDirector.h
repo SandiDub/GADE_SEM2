@@ -26,7 +26,7 @@ public:
 	float WaveInterval = 12.f;
 
 	UPROPERTY(EditAnywhere, Category = "Td|Waves", meta = (ClampMin = "0.05"))
-	float SpawnStagger = 0.6f;
+	float SpawnStagger = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Td|Waves")
 	float BaseBudget = 30.f;
@@ -56,17 +56,19 @@ protected:
 	void CollectTelemetry(FTdPlayerTelemetry& Out) const;
 	ETdPlayStyle ClassifyStyle(const FTdPlayerTelemetry& T) const;
 	float ComputeBudget(const FTdPlayerTelemetry& T) const;
-	void ComposeWave(float Budget, const FTdPlayerTelemetry& T, TArray<FTdWaveSpawn>& Out) const;
+	void ComposeWave(float Budget, const FTdPlayerTelemetry& T, TArray<FTdWaveSpawn>& Out);
 	int32 PickPath(const FTdPlayerTelemetry& T, ETdEnemyBehaviour ForType) const;
 	void Dispatch(const TArray<FTdWaveSpawn>& Wave);
 
 	void OnWaveTimer();
+	void ReseedWaveRng();
 
 	TArray<TObjectPtr<AEnemySpawner>> Spawners;
 	FTimerHandle WaveTimer;
 	int32 WaveIndex = 0;
 	float LastBudget = 0.f;
 	ETdPlayStyle LastStyle = ETdPlayStyle::Unknown;
+	FRandomStream WaveRng;
 
 	UFUNCTION()
 	void SpawnNextPending();
