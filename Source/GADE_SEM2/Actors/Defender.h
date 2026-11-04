@@ -19,6 +19,15 @@ class GADE_SEM2_API ADefender : public AActor
 public:
 	ADefender();
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Upgrades")
+    int32 CurrentLevel = 0;
+
+    UFUNCTION(BlueprintCallable, Category = "Upgrades")
+    void Upgrade();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Upgrades")
+    void OnUpgraded();
+
 	UPROPERTY(VisibleAnywhere, Category = "Td")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
@@ -57,5 +66,5 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UDefenderData> CachedData;
 
-	ETdDefenderBehaviour CachedBehaviour = ETdDefenderBehaviour::Gunner;
+	ETdDefenderBehaviour CachedBehaviour = ETdDefenderBehaviour::Gunner;	
 };

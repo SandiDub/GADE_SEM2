@@ -25,7 +25,8 @@ void UHealthComponent::TakeDamage(float Amount)
 		return;
 	}
 
-	CurrentHealth = FMath::Max(0.f, CurrentHealth - Amount);
+	const float Mitigated = Amount * (1.f - FMath::Clamp(Defense, 0.f, 0.75f));
+	CurrentHealth = FMath::Max(0.f, CurrentHealth - Mitigated);
 	OnHealthChanged.Broadcast(CurrentHealth, MaxHealth);
 
 	// TODO (UI, Day 7): flash the owner's mesh (emissive or custom depth) so hits are readable.

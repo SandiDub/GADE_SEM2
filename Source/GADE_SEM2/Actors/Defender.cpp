@@ -61,3 +61,29 @@ void ADefender::HandleDeath()
 	// You can spawn a particle effect or play a sound here later!
 	Destroy(); // Removes the defender from the map
 }
+
+void ADefender::Upgrade()
+{
+    // Max level is 2 (giving you 3 total visual states: Base, Upgrade 1, Upgrade 2)
+    if (CurrentLevel < 2)
+    {
+        CurrentLevel++;
+
+        // 1. Scale Health
+        if (Health)
+        {
+            Health->MaxHealth *= 1.5f;
+            Health->ResetHealth(); // Fills them back up to the new max 
+        }
+
+        // 2. Scale Attack Speed
+        if (AutoAttack)
+        {
+            // Lower FireInterval means faster shooting
+            AutoAttack->FireInterval *= 0.8f; 
+        }
+
+        // 3. Trigger the visual Shader hook for Blueprints
+        OnUpgraded();
+    }
+}
