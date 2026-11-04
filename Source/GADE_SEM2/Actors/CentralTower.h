@@ -16,6 +16,15 @@ class GADE_SEM2_API ACentralTower : public AActor
 
 public:
 	ACentralTower();
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Upgrades")
+    int32 CurrentLevel = 0;
+
+    UFUNCTION(BlueprintCallable, Category = "Upgrades")
+    void Upgrade();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Upgrades")
+    void OnUpgraded();
 
 	UPROPERTY(VisibleAnywhere, Category = "Td")
 	TObjectPtr<UStaticMeshComponent> Mesh;

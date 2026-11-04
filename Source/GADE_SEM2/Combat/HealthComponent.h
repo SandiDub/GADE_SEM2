@@ -23,6 +23,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Health", meta = (ClampMin = "1.0"))
 	float MaxHealth = 100.f;
 
+	/** Incoming damage multiplier reduction in [0, 1]. 0.2 = 20% less damage. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Health", meta = (ClampMin = "0.0", ClampMax = "0.75"))
+	float Defense = 0.f;
+
 	UPROPERTY(BlueprintAssignable, Category = "Td|Health")
 	FOnTdHealthChanged OnHealthChanged;
 
