@@ -53,8 +53,8 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
         return false;
     }
 
-    // Cost escalates with every defender bought, so spamming turrets is a real decision.
-    const int32 Price = GM->GetNextDefenderCost();
+    // Price is per type, so stacking one kind gets expensive but mixing stays cheap.
+    const int32 Price = GM->GetDefenderCost(Data);
     if (!GS->CanAfford(Price))
     {
         UE_LOG(LogTemp, Warning, TEXT("Td: Not enough gold (need %d, have %d)."), Price, GS->Gold);
@@ -89,7 +89,10 @@ bool ADefenderSlot::OnClickedByPlayer(ATdPlayerController* Player)
             MarkerMesh->SetVisibility(false,true);
         }
         bOccupied = true;
-        GM->NotifyDefenderPurchased();
+        GM->NotifyDefenderPurchased(Data);
+
+        UE_LOG(LogTemp, Log, TEXT("Td: placed '%s' on lane %d for %dg."),
+            *Data->GetName(), SlotData.PathIndex, Price);
 
         return true;
     }

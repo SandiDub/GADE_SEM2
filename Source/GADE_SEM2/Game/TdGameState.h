@@ -5,6 +5,8 @@
 #include "TdTypes.h"
 #include "TdGameState.generated.h"
 
+class UDefenderData;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTdWaveChanged, int32, WaveNumber);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTdGoldChanged, int32, Gold, int32, NextCost);
 
@@ -65,9 +67,26 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Td|Waves")
 	float EnemySpeedScale = 1.f;
 
-	/** How many defenders the player has bought. Drives cost escalation. */
+	/** Total defenders bought. Stats only; cost is per-type, see PurchasesByType. */
 	UPROPERTY(BlueprintReadOnly, Category = "Td|Economy")
 	int32 DefendersPurchased = 0;
+
+	/**
+	 * Purchases keyed by defender type. Cost escalates per type, so stacking
+	 * Gunners raises only the Gunner price and mixing types stays affordable.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Td|Economy")
+	TMap<TObjectPtr<UDefenderData>, int32> PurchasesByType;
+
+	UFUNCTION(BlueprintPure, Category = "Td|Economy")
+	int32 GetPurchaseCount(UDefenderData* Data) const;
+
+	/**
+	 * Kill rewards are multiplied by this. Grows each wave so a late kill is
+	 * worth more, keeping income roughly in step with the enemy health curve.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Td|Economy")
+	float GoldMultiplier = 1.f;
 
 	UPROPERTY(BlueprintAssignable, Category = "Td|Events")
 	FOnTdWaveChanged OnWaveChanged;
@@ -77,6 +96,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Td")
 	void AddGold(int32 Amount);
+
+	/** Gold for a kill, scaled by the current wave multiplier. */
+	UFUNCTION(BlueprintCallable, Category = "Td|Economy")
+	void AddKillReward(int32 BaseReward);
 
 	UFUNCTION(BlueprintCallable, Category = "Td")
 	bool TrySpendGold(int32 Amount);

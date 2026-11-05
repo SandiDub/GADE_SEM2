@@ -5,6 +5,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Game/TdGameMode.h"
 #include "Game/TdGameState.h"
+#include "Game/TdPlayerController.h"
 
 ACentralTower::ACentralTower()
 {
@@ -51,10 +52,21 @@ void ACentralTower::HandleDeath()
 	}
 }
 
+bool ACentralTower::OnClickedByPlayer(ATdPlayerController* Player)
+{
+    if (!Player)
+    {
+        return false;
+    }
+
+    Player->SetUpgradeTarget(this);
+    return true;
+}
+
 void ACentralTower::Upgrade()
 {
-    // Max level is 2 (giving you 3 total visual states: Base, Upgrade 1, Upgrade 2)
-    if (CurrentLevel < 2)
+    // Three visual states total: Base, Upgrade 1, Upgrade 2.
+    if (CanUpgrade())
     {
         CurrentLevel++;
 
@@ -72,7 +84,15 @@ void ACentralTower::Upgrade()
             AutoAttack->FireInterval *= 0.8f; 
         }
 
-        // 3. Trigger the visual Shader hook for Blueprints
+        // 3. The hub has no behaviour type, so it upgrades into raw reach and
+        //    punch. This is what makes a late tower upgrade worth the gold.
+        if (AutoAttack)
+        {
+            AutoAttack->Range += 120.f;
+            AutoAttack->Damage *= 1.25f;
+        }
+
+        // 4. Trigger the visual Shader hook for Blueprints
         OnUpgraded();
     }
 }

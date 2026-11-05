@@ -3,6 +3,7 @@
 #include "Combat/AutoAttackComponent.h"
 #include "Data/DefenderData.h"
 #include "Components/StaticMeshComponent.h"
+#include "Game/TdPlayerController.h"
 
 void ADefender::BeginPlay()
 {
@@ -62,10 +63,81 @@ void ADefender::HandleDeath()
 	Destroy(); // Removes the defender from the map
 }
 
+void ADefender::ApplyUpgradeEffects()
+{
+    if (!AutoAttack)
+    {
+        return;
+    }
+
+    switch (CachedBehaviour)
+    {
+    case ETdDefenderBehaviour::Gunner:
+        // Reach first, then a second barrel. Stays single-target damage but
+        // starts clearing the trash that used to slip past.
+        AutoAttack->Range += 90.f;
+        if (CurrentLevel >= 2)
+        {
+            ExtraTargets = 1;
+        }
+        break;
+
+    case ETdDefenderBehaviour::Frost:
+        // The chill bites harder each level, then spreads to the whole group.
+        SlowStrengthScale *= 0.8f;
+        BonusSlowDuration += 0.5f;
+        if (CurrentLevel >= 2)
+        {
+            SplashRadiusBonus += 260.f;
+        }
+        break;
+
+    case ETdDefenderBehaviour::Mortar:
+        // Wider blast, then the blast also staggers what it does not kill.
+        SplashRadiusBonus += 90.f;
+        if (CurrentLevel >= 2)
+        {
+            BonusSlowDuration += 0.8f;
+            SlowStrengthScale = FMath::Min(SlowStrengthScale, 0.7f);
+        }
+        break;
+    }
+}
+
+float ADefender::GetEffectiveSplashRadius() const
+{
+    const float Base = CachedData ? CachedData->SplashRadius : 0.f;
+    return Base + SplashRadiusBonus;
+}
+
+float ADefender::GetEffectiveSlowDuration() const
+{
+    const float Base = CachedData ? CachedData->SlowDuration : 0.f;
+    return Base + BonusSlowDuration;
+}
+
+float ADefender::GetEffectiveSlowMultiplier() const
+{
+    const float Base = CachedData ? CachedData->SlowMultiplier : 1.f;
+    // Floored so a stacked Frost never freezes enemies outright.
+    return FMath::Clamp(Base * SlowStrengthScale, 0.25f, 1.f);
+}
+
+bool ADefender::OnClickedByPlayer(ATdPlayerController* Player)
+{
+    if (!Player)
+    {
+        return false;
+    }
+
+    Player->SetUpgradeTarget(this);
+    return true;
+}
+
 void ADefender::Upgrade()
 {
-    // Max level is 2 (giving you 3 total visual states: Base, Upgrade 1, Upgrade 2)
-    if (CurrentLevel < 2)
+    // Three visual states total: Base, Upgrade 1, Upgrade 2.
+    if (CanUpgrade())
     {
         CurrentLevel++;
 
@@ -83,7 +155,11 @@ void ADefender::Upgrade()
             AutoAttack->FireInterval *= 0.8f; 
         }
 
-        // 3. Trigger the visual Shader hook for Blueprints
+        // 3. Behaviour-specific effect, so each type upgrades into something
+        //    mechanically different rather than just a bigger health bar.
+        ApplyUpgradeEffects();
+
+        // 4. Trigger the visual Shader hook for Blueprints
         OnUpgraded();
     }
 }

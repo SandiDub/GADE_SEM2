@@ -32,6 +32,17 @@ void ATdGameState::AddGold(int32 Amount)
 	}
 }
 
+int32 ATdGameState::GetPurchaseCount(UDefenderData* Data) const
+{
+	const int32* Found = Data ? PurchasesByType.Find(Data) : nullptr;
+	return Found ? *Found : 0;
+}
+
+void ATdGameState::AddKillReward(int32 BaseReward)
+{
+	AddGold(FMath::RoundToInt(BaseReward * GoldMultiplier));
+}
+
 void ATdGameState::AddPressure(float Amount)
 {
 	if (Amount > 0.f)
@@ -70,6 +81,8 @@ void ATdGameState::ResetForNewMatch(int32 InSeed, int32 StartingGold, float InWa
 	EnemyDamageScale = 1.f;
 	EnemySpeedScale = 1.f;
 	DefendersPurchased = 0;
+	PurchasesByType.Reset();
+	GoldMultiplier = 1.f;
 
 	MatchState = ETdMatchState::Playing;
 

@@ -82,7 +82,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Waves", meta = (ClampMin = "0.25"))
 	float MinSpawnInterval = 1.6f;
 
-	/** Each defender bought raises the price of the next one, so spam is not free. */
+	/**
+	 * Price step applied per defender TYPE. Buying a third Gunner raises the
+	 * Gunner price only, so diversifying is the cheap play.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Economy", meta = (ClampMin = "0"))
 	int32 DefenderCostStep = 15;
 
@@ -90,14 +93,44 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Economy", meta = (ClampMin = "0"))
 	int32 GoldPerWave = 25;
 
+	/**
+	 * Added to the kill-gold multiplier each wave. 0.35 puts wave 5 at roughly
+	 * 2.4x wave 1, which tracks the +18%/wave enemy health curve.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Economy", meta = (ClampMin = "0.0"))
+	float GoldGrowthPerWave = 0.35f;
+
+	/** Ceiling so a long match cannot turn gold into a non-resource. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Economy", meta = (ClampMin = "1.0"))
+	float MaxGoldMultiplier = 4.f;
+
+	// ---- periodic repair ----
+
+	/** Heal everything on the player's side every N waves. 0 disables it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Repair", meta = (ClampMin = "0"))
+	int32 RepairWaveInterval = 3;
+
+	/** Fraction of max health restored. 0.2 = 20%. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Repair", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RepairPercent = 0.2f;
+
+	/** Cost of a specific type: its data asset Cost plus this player's own step for that type. */
+	UFUNCTION(BlueprintPure, Category = "Td|Balance")
+	int32 GetDefenderCost(UDefenderData* Data) const;
+
+	/** Cost of whatever is currently selected. What the HUD shows. */
 	UFUNCTION(BlueprintPure, Category = "Td|Balance")
 	int32 GetNextDefenderCost() const;
 
 	/** Slots call this after a successful purchase. */
-	void NotifyDefenderPurchased();
+	void NotifyDefenderPurchased(UDefenderData* Data);
 
 	/** GameState wave clock calls this. Scales enemies and tightens spawns. */
 	void NotifyWaveElapsed();
+
+	/** Restores RepairPercent of max health to the tower and every living defender. */
+	UFUNCTION(BlueprintCallable, Category = "Td|Balance|Repair")
+	void ApplyWaveRepair();
 
 	UFUNCTION(BlueprintCallable, Category = "Td")
 	void StartNewMatch();

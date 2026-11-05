@@ -90,17 +90,25 @@ void UAutoAttackComponent::FireAt(AActor* Target)
     TArray<AActor*> Victims;
     Victims.Add(Target);
 
-    UDefenderData* DefData = nullptr;
-    if (ADefender* OwnerDef = Cast<ADefender>(GetOwner()))
+    // Upgrades live on the instance, not the shared data asset, so read the
+    // effective values from the defender rather than from DefenderData.
+    ADefender* OwnerDef = Cast<ADefender>(GetOwner());
+    float SlowMult = 1.f;
+    float SlowDuration = 0.f;
+
+    if (OwnerDef)
     {
-        DefData = OwnerDef->GetData();
-        if (DefData && DefData->SplashRadius > 0.f)
+        SlowMult = OwnerDef->GetEffectiveSlowMultiplier();
+        SlowDuration = OwnerDef->GetEffectiveSlowDuration();
+
+        const float Splash = OwnerDef->GetEffectiveSplashRadius();
+        if (Splash > 0.f)
         {
             TArray<AActor*> SplashHits;
             UKismetSystemLibrary::SphereOverlapActors(
                 GetWorld(),
                 Target->GetActorLocation(),
-                DefData->SplashRadius,
+                Splash,
                 TArray<TEnumAsByte<EObjectTypeQuery>>(),
                 AEnemy::StaticClass(),
                 TArray<AActor*>(),
@@ -111,6 +119,34 @@ void UAutoAttackComponent::FireAt(AActor* Target)
                 Victims.AddUnique(Hit);
             }
         }
+
+        // Upgraded Gunners engage additional enemies inside their own radius.
+        if (OwnerDef->ExtraTargets > 0)
+        {
+            TArray<AActor*> Nearby;
+            UKismetSystemLibrary::SphereOverlapActors(
+                GetWorld(),
+                GetOwner()->GetActorLocation(),
+                GetEffectiveRange(),
+                TArray<TEnumAsByte<EObjectTypeQuery>>(),
+                AEnemy::StaticClass(),
+                TArray<AActor*>{ GetOwner() },
+                Nearby
+            );
+
+            int32 Added = 0;
+            for (AActor* Extra : Nearby)
+            {
+                if (Added >= OwnerDef->ExtraTargets)
+                {
+                    break;
+                }
+                if (Extra != Target && Victims.AddUnique(Extra) != INDEX_NONE)
+                {
+                    ++Added;
+                }
+            }
+        }
     }
 
     for (AActor* Victim : Victims)
@@ -119,11 +155,11 @@ void UAutoAttackComponent::FireAt(AActor* Target)
         {
             TargetHealth->TakeDamage(Damage);
         }
-        if (DefData && DefData->SlowDuration > 0.f)
+        if (SlowDuration > 0.f)
         {
             if (AEnemy* E = Cast<AEnemy>(Victim))
             {
-                E->ApplySlow(DefData->SlowMultiplier, DefData->SlowDuration);
+                E->ApplySlow(SlowMult, SlowDuration);
             }
         }
     }

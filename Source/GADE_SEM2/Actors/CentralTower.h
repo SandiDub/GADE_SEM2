@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "TdTypes.h"
+#include "Actors/TdClickable.h"
 #include "CentralTower.generated.h"
 
 class UHealthComponent;
@@ -10,7 +11,7 @@ class UAutoAttackComponent;
 class UStaticMeshComponent;
 
 UCLASS()
-class GADE_SEM2_API ACentralTower : public AActor
+class GADE_SEM2_API ACentralTower : public AActor, public ITdClickable
 {
 	GENERATED_BODY()
 
@@ -20,13 +21,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Upgrades")
     int32 CurrentLevel = 0;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Upgrades")
+    int32 MaxLevel = 2;
+
+    /** Lets the UI grey out the button and the controller avoid charging for a no-op. */
+    UFUNCTION(BlueprintPure, Category = "Upgrades")
+    bool CanUpgrade() const { return CurrentLevel < MaxLevel; }
+
     UFUNCTION(BlueprintCallable, Category = "Upgrades")
     void Upgrade();
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Upgrades")
     void OnUpgraded();
 
-	UPROPERTY(VisibleAnywhere, Category = "Td")
+	/** Clicking the hub selects it as the upgrade target. */
+	virtual bool OnClickedByPlayer(ATdPlayerController* Player) override;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Td")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Td")

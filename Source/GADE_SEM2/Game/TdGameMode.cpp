@@ -6,6 +6,8 @@
 #include "Actors/EnemySpawner.h"
 #include "Actors/Enemy.h"
 #include "Actors/Defender.h"
+#include "Actors/CentralTower.h"
+#include "Combat/HealthComponent.h"
 #include "Wave/WaveDirector.h"
 #include "Data/DefenderData.h"
 #include "Data/EnemyData.h"
@@ -196,25 +198,72 @@ void ATdGameMode::NotifyTowerDestroyed()
 	// TODO (Day 7): show a game-over UMG widget (survived time, kills, Restart button).
 }
 
-int32 ATdGameMode::GetNextDefenderCost() const
+void ATdGameMode::ApplyWaveRepair()
 {
-	const UDefenderData* Data = GetSelectedDefenderData();
-	const int32 Base = Data ? Data->Cost : 50;
-
-	int32 Purchased = 0;
-	if (const ATdGameState* GS = GetGameState<ATdGameState>())
+	UWorld* World = GetWorld();
+	if (!World || RepairPercent <= 0.f)
 	{
-		Purchased = GS->DefendersPurchased;
+		return;
 	}
 
-	return Base + Purchased * DefenderCostStep;
+	int32 Repaired = 0;
+
+	// Percentage of max, so an upgraded unit repairs proportionally and a
+	// dead one stays dead. Heal() already clamps to MaxHealth.
+	auto RepairActor = [this, &Repaired](AActor* Actor)
+	{
+		if (!Actor) { return; }
+		UHealthComponent* H = Actor->FindComponentByClass<UHealthComponent>();
+		if (!H || H->IsDead()) { return; }
+
+		H->Heal(H->MaxHealth * RepairPercent);
+		++Repaired;
+	};
+
+	RepairActor(UGameplayStatics::GetActorOfClass(World, ACentralTower::StaticClass()));
+
+	TArray<AActor*> Defenders;
+	UGameplayStatics::GetAllActorsOfClass(World, ADefender::StaticClass(), Defenders);
+	for (AActor* D : Defenders)
+	{
+		RepairActor(D);
+	}
+
+	if (GEngine && Repaired > 0)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Green,
+			FString::Printf(TEXT("Repair: +%d%% health to %d units"),
+				FMath::RoundToInt(RepairPercent * 100.f), Repaired));
+	}
 }
 
-void ATdGameMode::NotifyDefenderPurchased()
+int32 ATdGameMode::GetNextDefenderCost() const
+{
+	return GetDefenderCost(GetSelectedDefenderData());
+}
+
+int32 ATdGameMode::GetDefenderCost(UDefenderData* Data) const
+{
+	if (!Data)
+	{
+		return 0;
+	}
+
+	const ATdGameState* GS = GetGameState<ATdGameState>();
+	const int32 Owned = GS ? GS->GetPurchaseCount(Data) : 0;
+
+	return Data->Cost + Owned * DefenderCostStep;
+}
+
+void ATdGameMode::NotifyDefenderPurchased(UDefenderData* Data)
 {
 	if (ATdGameState* GS = GetGameState<ATdGameState>())
 	{
 		++GS->DefendersPurchased;
+		if (Data)
+		{
+			++GS->PurchasesByType.FindOrAdd(Data);
+		}
 	}
 }
 
@@ -228,6 +277,17 @@ void ATdGameMode::NotifyWaveElapsed()
 
 	GS->AdvanceWave(EnemyHealthPerWave, EnemyDamagePerWave, EnemySpeedPerWave, MaxEnemySpeedScale);
 	GS->AddGold(GoldPerWave);
+
+	// Income tracks the health curve, otherwise late kills stop paying for the
+	// defenders needed to make them.
+	GS->GoldMultiplier = FMath::Min(
+		MaxGoldMultiplier,
+		1.f + (GS->WaveNumber - 1) * GoldGrowthPerWave);
+
+	if (RepairWaveInterval > 0 && (GS->WaveNumber % RepairWaveInterval) == 0)
+	{
+		ApplyWaveRepair();
+	}
 
 	// The director owns cadence once it exists; otherwise tighten the Part 1 spawners.
 	if (!WaveDirector)

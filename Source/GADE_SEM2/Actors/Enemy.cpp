@@ -205,7 +205,7 @@ void AEnemy::HandleDeath()
     if (ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr)
     {
         const int32 Reward = Data ? Data->GoldReward : 0;
-        GS->AddGold(Reward);
+        GS->AddKillReward(Reward);
         GS->AddKill();
     }
     Destroy();
