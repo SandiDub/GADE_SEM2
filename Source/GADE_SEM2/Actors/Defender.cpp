@@ -48,6 +48,33 @@ void ADefender::ApplyData(UDefenderData* Data)
 	{
 		Mesh->SetStaticMesh(Data->Mesh);
 	}
+	Mesh->SetRelativeScale3D(Data->MeshScale);
+
+	// Must run after SetStaticMesh: swapping the mesh resets materials.
+	RefreshMaterial();
+}
+
+void ADefender::RefreshMaterial()
+{
+	if (!Mesh || !Mesh->GetStaticMesh())
+	{
+		return;
+	}
+
+	if (!BodyMID)
+	{
+		BodyMID = Mesh->CreateAndSetMaterialInstanceDynamic(0);
+	}
+	if (!BodyMID)
+	{
+		return;
+	}
+
+	if (CachedData)
+	{
+		BodyMID->SetVectorParameterValue(TintParamName, CachedData->AccentColor);
+	}
+	BodyMID->SetScalarParameterValue(LevelParamName, static_cast<float>(CurrentLevel));
 }
 
 void ADefender::ApplyHeightAdvantage(float HeightAdvantage)
@@ -159,7 +186,17 @@ void ADefender::Upgrade()
         //    mechanically different rather than just a bigger health bar.
         ApplyUpgradeEffects();
 
-        // 4. Trigger the visual Shader hook for Blueprints
+        // 4. Push the new level into this unit's own material instance.
+        RefreshMaterial();
+
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan,
+                FString::Printf(TEXT("%s upgraded to L%d"),
+                    CachedData ? *CachedData->GetName() : TEXT("Defender"), CurrentLevel));
+        }
+
+        // 5. Trigger the visual Shader hook for Blueprints
         OnUpgraded();
     }
 }

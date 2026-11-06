@@ -13,6 +13,22 @@ enum class ETdEnemyBehaviour : uint8
 	Bruiser UMETA(DisplayName = "Bruiser — prefer peeling defenders")
 };
 
+/**
+ * Rolled per spawn by the procedural mutation pass. Each one is a trade, not
+ * a straight buff, so a mutated unit is a different problem rather than a
+ * harder one and the wave director's threat budget stays honest.
+ */
+UENUM(BlueprintType)
+enum class ETdEnemyMutation : uint8
+{
+	None      UMETA(DisplayName = "Baseline"),
+	Armoured  UMETA(DisplayName = "Armoured — bulkier and slower"),
+	Swift     UMETA(DisplayName = "Swift — faster and frailer"),
+	Volatile  UMETA(DisplayName = "Volatile — hits harder, dies quicker"),
+	Giant     UMETA(DisplayName = "Giant — large, tanky, sluggish"),
+	Runt      UMETA(DisplayName = "Runt — small, quick, fragile")
+};
+
 UENUM(BlueprintType)
 enum class ETdDefenderBehaviour : uint8
 {

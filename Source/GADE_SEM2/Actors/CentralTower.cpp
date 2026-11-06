@@ -30,6 +30,28 @@ void ACentralTower::BeginPlay()
 	Health->OnDeath.AddDynamic(this, &ACentralTower::HandleDeath);
 	Health->OnHealthChanged.AddDynamic(this, &ACentralTower::HandleHealthChanged);
 	LastHealth = Health->GetHealth();
+
+	RefreshMaterial();
+}
+
+void ACentralTower::RefreshMaterial()
+{
+	if (!Mesh || !Mesh->GetStaticMesh())
+	{
+		return;
+	}
+
+	if (!BodyMID)
+	{
+		BodyMID = Mesh->CreateAndSetMaterialInstanceDynamic(0);
+	}
+	if (!BodyMID)
+	{
+		return;
+	}
+
+	BodyMID->SetVectorParameterValue(TintParamName, AccentColor);
+	BodyMID->SetScalarParameterValue(LevelParamName, static_cast<float>(CurrentLevel));
 }
 
 void ACentralTower::HandleHealthChanged(float Current, float Max)
@@ -92,7 +114,10 @@ void ACentralTower::Upgrade()
             AutoAttack->Damage *= 1.25f;
         }
 
-        // 4. Trigger the visual Shader hook for Blueprints
+        // 4. Push the new level into the hub's own material instance.
+        RefreshMaterial();
+
+        // 5. Trigger the visual Shader hook for Blueprints
         OnUpgraded();
     }
 }

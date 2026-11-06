@@ -164,5 +164,13 @@ void UAutoAttackComponent::FireAt(AActor* Target)
         }
     }
 
-    DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation(), Target->GetActorLocation(), FColor::Red, false, 0.2f, 0, 2.f);
+    const FVector Muzzle = GetOwner()->GetActorLocation() + MuzzleOffset;
+    const FVector Impact = Target->GetActorLocation();
+
+    OnFired.Broadcast(Target, Muzzle, Impact);
+
+    if (bDrawDebugTracer)
+    {
+        DrawDebugLine(GetWorld(), Muzzle, Impact, FColor::Red, false, 0.2f, 0, 2.f);
+    }
 }

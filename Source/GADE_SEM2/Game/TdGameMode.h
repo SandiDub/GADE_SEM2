@@ -106,6 +106,13 @@ public:
 
 	// ---- periodic repair ----
 
+	/** Every N defenders placed, the generator releases more build slots. 0 disables. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Economy", meta = (ClampMin = "0"))
+	int32 DefendersPerSlotUnlock = 4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Economy", meta = (ClampMin = "0"))
+	int32 SlotsPerUnlock = 3;
+
 	/** Heal everything on the player's side every N waves. 0 disables it. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Repair", meta = (ClampMin = "0"))
 	int32 RepairWaveInterval = 3;

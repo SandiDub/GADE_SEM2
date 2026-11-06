@@ -4,6 +4,8 @@
 #include "Actors/DefenderSlot.h"
 #include "Actors/EnemySpawner.h"
 #include "ProceduralMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "Materials/Material.h"
@@ -41,6 +43,7 @@ void AMapGenerator::GenerateWorld(int32 Seed)
 	RefreshWorldAnchors();
 	ExtractSlots();
 	BuildMesh();
+	ScatterProps();
 	SpawnGameplayActors();
 
 	if (bDrawDebug)
@@ -81,6 +84,13 @@ void AMapGenerator::ClearPreviousGeneration()
 	}
 	SpawnedSpawners.Reset();
 	SpawnCells.Reset();
+	ReservedSlots.Reset();
+
+	for (UInstancedStaticMeshComponent* Layer : PropLayers)
+	{
+		if (Layer) { Layer->DestroyComponent(); }
+	}
+	PropLayers.Reset();
 
 	if (TerrainMesh)
 	{
@@ -666,20 +676,27 @@ void AMapGenerator::ExtractSlots()
 	const int32 Spacing = FMath::Max(1, SlotSpacing);
 	TSet<FTdGridCoord> Taken;
 
-	auto TryPlace = [&](int32 PathIndex, const FTdGridCoord& C) -> bool
+	// Spacing is checked against live and reserved slots alike, so a slot
+	// unlocked later can never land on top of one the player already owns.
+	auto TooClose = [&](const TArray<FTdSlotData>& Existing, const FTdGridCoord& C) -> bool
 	{
-		if (Taken.Contains(C))
+		for (const FTdSlotData& Slot : Existing)
 		{
-			return false;
-		}
-		for (const FTdSlotData& Existing : Map.Slots)
-		{
-			const int32 Dx = FMath::Abs(Existing.Cell.X - C.X);
-			const int32 Dy = FMath::Abs(Existing.Cell.Y - C.Y);
+			const int32 Dx = FMath::Abs(Slot.Cell.X - C.X);
+			const int32 Dy = FMath::Abs(Slot.Cell.Y - C.Y);
 			if (FMath::Max(Dx, Dy) < Spacing)
 			{
-				return false;
+				return true;
 			}
+		}
+		return false;
+	};
+
+	auto TryPlaceInto = [&](TArray<FTdSlotData>& Out, int32 PathIndex, const FTdGridCoord& C) -> bool
+	{
+		if (Taken.Contains(C) || TooClose(Map.Slots, C) || TooClose(ReservedSlots, C))
+		{
+			return false;
 		}
 
 		FTdSlotData Slot;
@@ -687,9 +704,14 @@ void AMapGenerator::ExtractSlots()
 		Slot.PathIndex = PathIndex;
 		Slot.WorldTransform = FTransform(GetCellWorld(C));
 		Slot.HeightAdvantage = GetHeight(C) - GetHeight(Map.TowerCell);
-		Map.Slots.Add(Slot);
+		Out.Add(Slot);
 		Taken.Add(C);
 		return true;
+	};
+
+	auto TryPlace = [&](int32 PathIndex, const FTdGridCoord& C) -> bool
+	{
+		return TryPlaceInto(Map.Slots, PathIndex, C);
 	};
 
 	// Round-robin across paths so no lane can be over-slotted while another has none.
@@ -728,6 +750,161 @@ void AMapGenerator::ExtractSlots()
 			}
 		}
 	}
+
+	// Everything still valid past MaxSlots is held in reserve. UnlockSlots()
+	// releases these as the player builds, so the board opens up over a match
+	// instead of showing all its options in wave one.
+	bProgress = true;
+	while (bProgress)
+	{
+		bProgress = false;
+		for (int32 P = 0; P < PathNum; ++P)
+		{
+			while (Cursor[P] < Buckets[P].Num())
+			{
+				if (TryPlaceInto(ReservedSlots, P, Buckets[P][Cursor[P]++]))
+				{
+					bProgress = true;
+					break;
+				}
+			}
+		}
+	}
+}
+
+int32 AMapGenerator::UnlockSlots(int32 Count)
+{
+	UWorld* World = GetWorld();
+	if (!World || !SlotClass || Count <= 0 || ReservedSlots.Num() == 0)
+	{
+		return 0;
+	}
+
+	const int32 Num = FMath::Min(Count, ReservedSlots.Num());
+	for (int32 i = 0; i < Num; ++i)
+	{
+		const FTdSlotData SlotData = ReservedSlots[i];
+
+		ADefenderSlot* Slot = World->SpawnActor<ADefenderSlot>(SlotClass, SlotData.WorldTransform);
+		if (!Slot)
+		{
+			continue;
+		}
+
+		Slot->Configure(SlotData);
+		SpawnedSlots.Add(Slot);
+		Map.Slots.Add(SlotData);
+	}
+
+	ReservedSlots.RemoveAt(0, Num, EAllowShrinking::No);
+
+	UE_LOG(LogTemp, Log, TEXT("Td: unlocked %d slot(s), %d still reserved."), Num, ReservedSlots.Num());
+	return Num;
+}
+
+bool AMapGenerator::IsCellClearForProp(const FTdGridCoord& C) const
+{
+	// Only decorate ground the player will never need. A prop sitting on a
+	// lane or a build pad is a readability bug, not decoration.
+	if (GetTag(C) != ETdCellTag::Buildable)
+	{
+		return false;
+	}
+
+	const int32 R = FMath::Max(0, PropClearance);
+	for (int32 Dy = -R; Dy <= R; ++Dy)
+	{
+		for (int32 Dx = -R; Dx <= R; ++Dx)
+		{
+			const FTdGridCoord N(C.X + Dx, C.Y + Dy);
+			if (!TdGrid::IsInside(N, Resolution))
+			{
+				continue;
+			}
+			const ETdCellTag Tag = GetTag(N);
+			if (Tag == ETdCellTag::Path || Tag == ETdCellTag::TowerPad)
+			{
+				return false;
+			}
+		}
+	}
+
+	for (const FTdSlotData& Slot : Map.Slots)
+	{
+		if (FMath::Max(FMath::Abs(Slot.Cell.X - C.X), FMath::Abs(Slot.Cell.Y - C.Y)) <= R)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+void AMapGenerator::ScatterProps()
+{
+	if (!bScatterProps || PropMeshes.Num() == 0)
+	{
+		return;
+	}
+
+	// Derived from the map seed, so the same seed always dresses the same way
+	// and the scatter is reproducible alongside the terrain it sits on.
+	FRandomStream Rng(Map.Seed ^ 0x9E3779B9);
+
+	PropLayers.Reserve(PropMeshes.Num());
+	for (UStaticMesh* PropMesh : PropMeshes)
+	{
+		if (!PropMesh)
+		{
+			PropLayers.Add(nullptr);
+			continue;
+		}
+
+		UInstancedStaticMeshComponent* Layer = NewObject<UInstancedStaticMeshComponent>(this);
+		Layer->SetStaticMesh(PropMesh);
+		Layer->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Layer->SetCastShadow(false);
+		if (PropMaterial)
+		{
+			Layer->SetMaterial(0, PropMaterial);
+		}
+		Layer->SetupAttachment(TerrainMesh);
+		Layer->RegisterComponent();
+		PropLayers.Add(Layer);
+	}
+
+	int32 Placed = 0;
+	for (int32 Y = 0; Y < Resolution; ++Y)
+	{
+		for (int32 X = 0; X < Resolution; ++X)
+		{
+			const FTdGridCoord C(X, Y);
+			if (Rng.FRand() > PropDensity || !IsCellClearForProp(C))
+			{
+				continue;
+			}
+
+			const int32 LayerIndex = Rng.RandRange(0, PropLayers.Num() - 1);
+			UInstancedStaticMeshComponent* Layer = PropLayers[LayerIndex];
+			if (!Layer)
+			{
+				continue;
+			}
+
+			// Jitter inside the cell so the result never reads as a grid.
+			const float HalfCell = CellSize * 0.5f;
+			FVector Location = GetCellWorld(C);
+			Location.X += Rng.FRandRange(-HalfCell, HalfCell);
+			Location.Y += Rng.FRandRange(-HalfCell, HalfCell);
+
+			const FRotator Rotation(0.f, Rng.FRandRange(0.f, 360.f), 0.f);
+			const float Scale = Rng.FRandRange(PropScaleRange.X, PropScaleRange.Y);
+
+			Layer->AddInstance(FTransform(Rotation, Location, FVector(Scale)), true);
+			++Placed;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Td: scattered %d props across %d layer(s)."), Placed, PropLayers.Num());
 }
 
 void AMapGenerator::BuildMesh()
@@ -797,21 +974,39 @@ void AMapGenerator::BuildMesh()
 				}
 			}
 		}
-		if (PathN > 0) { return FColor(120, 90, 50); }
-		if (PadN > 0) { return FColor(220, 220, 210); }
-		if (BuildN >= BlockN) { return FColor(70, 140, 55); }
-		return FColor(90, 90, 95);
+		if (PathN > 0) { return PathColor.ToFColor(false); }
+		if (PadN > 0) { return TowerPadColor.ToFColor(false); }
+		if (BuildN >= BlockN) { return BuildableColor.ToFColor(false); }
+		return BlockedColor.ToFColor(false);
 	};
+
+	// Height range of this particular map, so the gradient always uses the
+	// full 0-1 span no matter how flat or dramatic the seed turned out.
+	float MinH = TNumericLimits<float>::Max();
+	float MaxH = TNumericLimits<float>::Lowest();
+	for (float H : Map.Height)
+	{
+		MinH = FMath::Min(MinH, H);
+		MaxH = FMath::Max(MaxH, H);
+	}
+	const float HeightSpan = FMath::Max(1.f, MaxH - MinH);
 
 	for (int32 Row = 0; Row < VRes; ++Row)
 	{
 		for (int32 Col = 0; Col < VRes; ++Col)
 		{
 			const int32 I = CornerIndex(Col, Row);
-			Verts[I] = Origin + FVector(Col * CellSize, Row * CellSize, CornerHeight(Col, Row));
+			const float H = CornerHeight(Col, Row);
+
+			Verts[I] = Origin + FVector(Col * CellSize, Row * CellSize, H);
 			UVs[I] = FVector2D(static_cast<float>(Col) / Resolution, static_cast<float>(Row) / Resolution);
 			Colors[I] = CornerColor(Col, Row);
 			Tangents[I] = FProcMeshTangent(1.f, 0.f, 0.f);
+
+			// RGB carries the cell tag, alpha carries normalised elevation.
+			// The material gets terrain shape for free out of a channel that
+			// was otherwise going to waste.
+			Colors[I].A = static_cast<uint8>(FMath::Clamp((H - MinH) / HeightSpan, 0.f, 1.f) * 255.f);
 		}
 	}
 

@@ -8,6 +8,13 @@
 class AActor;
 
 /**
+ * Fired once per volley, before damage. Bind in BP_Defender / BP_CentralTower
+ * and spawn a Niagara beam between MuzzleLocation and HitLocation.
+ * One short-lived burst per shot is far cheaper than real projectile actors.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTdFired, AActor*, Target, FVector, MuzzleLocation, FVector, HitLocation);
+
+/**
  * Shared auto-fire for tower and defenders (and optionally enemies).
  * Fill in AcquireTarget and Fire — those are the marks.
  */
@@ -40,6 +47,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Td|Combat")
 	void SetEnabled(bool bInEnabled) { bEnabled = bInEnabled; }
+
+	/** Hook your muzzle flash / tracer VFX here. */
+	UPROPERTY(BlueprintAssignable, Category = "Td|Combat")
+	FOnTdFired OnFired;
+
+	/** Red editor tracer. Turn this off once your Niagara beam is bound. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Combat")
+	bool bDrawDebugTracer = false;
+
+	/** Local offset the beam starts from, so shots leave the barrel not the floor. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Combat")
+	FVector MuzzleOffset = FVector(0.f, 0.f, 90.f);
 
 protected:
 	virtual void BeginPlay() override;

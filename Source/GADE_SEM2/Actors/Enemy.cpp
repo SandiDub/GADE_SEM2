@@ -58,16 +58,125 @@ void AEnemy::ApplyData(UEnemyData* InData)
     {
         Mesh->SetStaticMesh(Data->Mesh);
     }
+
+    FLinearColor Tint = Data->AccentColor;
+    FVector Scale = Data->MeshScale;
+
+    ApplyProceduralMutation(Tint, Scale);
+
+    Mesh->SetRelativeScale3D(Scale);
+
+    // Own material instance per enemy, so the mutation colour is per-unit and
+    // recolouring one never bleeds into the rest of the wave.
+    if (Mesh->GetStaticMesh())
+    {
+        if (UMaterialInstanceDynamic* MID = Mesh->CreateAndSetMaterialInstanceDynamic(0))
+        {
+            MID->SetVectorParameterValue(TintParamName, Tint);
+        }
+    }
+
+    OnMutationApplied(Mutation);
+}
+
+void AEnemy::ApplyProceduralMutation(FLinearColor& InOutTint, FVector& InOutScale)
+{
+    if (!bEnableMutation || !Data)
+    {
+        return;
+    }
+
+    // Seeded per unit rather than per wave: the stream is derived from this
+    // actor's unique name and the wave it arrived in, so the roll is stable
+    // for the lifetime of the unit but never repeats across the match.
+    const ATdGameState* GS = GetWorld() ? GetWorld()->GetGameState<ATdGameState>() : nullptr;
+    const int32 Wave = GS ? GS->WaveNumber : 1;
+    FRandomStream Rng(GetFName().GetNumber() * 2654435761u ^ (Wave * 40503));
+
+    // Continuous roll first. Even an unmutated unit gets its own build, which
+    // is what stops a wave reading as a row of identical clones.
+    const float SizeRoll = Rng.FRandRange(0.82f, 1.25f);
+    InOutScale *= SizeRoll;
+
+    // Bigger bodies carry more mass, smaller ones move quicker.
+    Health->MaxHealth *= FMath::Lerp(0.85f, 1.2f, (SizeRoll - 0.82f) / 0.43f);
+    MutationSpeedScale *= FMath::Lerp(1.12f, 0.9f, (SizeRoll - 0.82f) / 0.43f);
+
+    // Hue drift keeps every enemy inside the red danger band but distinct.
+    InOutTint.G *= Rng.FRandRange(0.6f, 1.5f);
+    InOutTint.R *= Rng.FRandRange(0.85f, 1.3f);
+
+    // Discrete mutation second. Later waves mutate more often, so the roster
+    // visibly diversifies as pressure builds.
+    const float MutateChance = FMath::Min(0.65f, 0.15f + Wave * 0.05f);
+    if (Rng.FRand() > MutateChance)
+    {
+        MutationName = FText::GetEmpty();
+        Mutation = ETdEnemyMutation::None;
+    }
+    else
+    {
+        static const ETdEnemyMutation Options[] = {
+            ETdEnemyMutation::Armoured, ETdEnemyMutation::Swift,
+            ETdEnemyMutation::Volatile, ETdEnemyMutation::Giant,
+            ETdEnemyMutation::Runt };
+
+        Mutation = Options[Rng.RandRange(0, UE_ARRAY_COUNT(Options) - 1)];
+
+        switch (Mutation)
+        {
+        case ETdEnemyMutation::Armoured:
+            Health->MaxHealth *= 1.6f;
+            MutationSpeedScale *= 0.75f;
+            InOutTint = FLinearColor(1.4f, 0.5f, 0.2f);
+            break;
+
+        case ETdEnemyMutation::Swift:
+            Health->MaxHealth *= 0.65f;
+            MutationSpeedScale *= 1.5f;
+            InOutTint = FLinearColor(3.2f, 0.9f, 0.1f);
+            break;
+
+        case ETdEnemyMutation::Volatile:
+            Health->MaxHealth *= 0.7f;
+            MutationDamageScale *= 1.8f;
+            InOutTint = FLinearColor(4.f, 0.05f, 0.6f);
+            break;
+
+        case ETdEnemyMutation::Giant:
+            Health->MaxHealth *= 2.2f;
+            MutationSpeedScale *= 0.6f;
+            InOutScale *= 1.5f;
+            InOutTint = FLinearColor(2.2f, 0.1f, 0.05f);
+            break;
+
+        case ETdEnemyMutation::Runt:
+            Health->MaxHealth *= 0.5f;
+            MutationSpeedScale *= 1.35f;
+            MutationDamageScale *= 0.7f;
+            InOutScale *= 0.65f;
+            InOutTint = FLinearColor(2.6f, 1.2f, 0.2f);
+            break;
+
+        default:
+            break;
+        }
+
+        MutationName = StaticEnum<ETdEnemyMutation>()->GetDisplayNameTextByValue(
+            static_cast<int64>(Mutation));
+    }
+
+    Health->ResetHealth();
 }
 
 float AEnemy::GetMoveSpeed() const
 {
-    return Data ? Data->MoveSpeed * SpeedScale * MoveSpeedMultiplier : 0.f;
+    return Data ? Data->MoveSpeed * SpeedScale * MutationSpeedScale * MoveSpeedMultiplier : 0.f;
 }
 
 float AEnemy::GetAttackDamage() const
 {
-    return Data ? Data->Damage * DamageScale : 0.f;
+    return Data ? Data->Damage * DamageScale * MutationDamageScale : 0.f;
 }
 
 void AEnemy::SetPath(const FTdPath& InPath)

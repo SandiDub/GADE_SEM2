@@ -264,6 +264,19 @@ void ATdGameMode::NotifyDefenderPurchased(UDefenderData* Data)
 		{
 			++GS->PurchasesByType.FindOrAdd(Data);
 		}
+
+		// Reward commitment with room to build. The board only grows once the
+		// player has actually filled it, so wave one still reads as a small map.
+		if (Generator && DefendersPerSlotUnlock > 0 &&
+			(GS->DefendersPurchased % DefendersPerSlotUnlock) == 0)
+		{
+			const int32 Opened = Generator->UnlockSlots(SlotsPerUnlock);
+			if (Opened > 0 && GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Cyan,
+					FString::Printf(TEXT("%d new build slot(s) unlocked"), Opened));
+			}
+		}
 	}
 }
 

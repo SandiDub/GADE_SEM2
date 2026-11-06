@@ -44,4 +44,16 @@ public:
 	/** Spent from the director ThreatBudget when this unit is queued. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Enemy")
 	int32 ThreatCost = 10;
+
+	/**
+	 * Pushed into the mesh material as a vector parameter at spawn. Keep enemies
+	 * in the red/orange half of the wheel so threat reads instantly.
+	 * Values above 1 bloom, which is what makes them glow.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Enemy|Visuals")
+	FLinearColor AccentColor = FLinearColor(3.f, 0.15f, 0.1f);
+
+	/** Uniform scale applied at spawn. Cheap way to give each type a silhouette. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Enemy|Visuals", meta = (ClampMin = "0.1"))
+	FVector MeshScale = FVector(1.f, 1.f, 1.f);
 };

@@ -40,7 +40,13 @@ int32 ATdGameState::GetPurchaseCount(UDefenderData* Data) const
 
 void ATdGameState::AddKillReward(int32 BaseReward)
 {
-	AddGold(FMath::RoundToInt(BaseReward * GoldMultiplier));
+	const float Scaled = BaseReward * GoldMultiplier;
+
+	// Snap to the nearest step so the counter never shows 37.
+	const int32 Step = FMath::Max(1, GoldRoundTo);
+	const int32 Rounded = FMath::RoundToInt(Scaled / Step) * Step;
+
+	AddGold(FMath::Max(Step, Rounded));
 }
 
 void ATdGameState::AddPressure(float Amount)

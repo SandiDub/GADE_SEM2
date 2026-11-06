@@ -37,6 +37,24 @@ public:
 	/** Clicking the hub selects it as the upgrade target. */
 	virtual bool OnClickedByPlayer(ATdPlayerController* Player) override;
 
+	// ---- visuals ----
+	// The hub has no data asset, so its colour lives here. Keep it the deepest
+	// blue on the map: it should read as the thing you are protecting.
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Visuals")
+	FLinearColor AccentColor = FLinearColor(0.2f, 0.6f, 4.f);
+
+	UPROPERTY(EditAnywhere, Category = "Td|Visuals")
+	FName TintParamName = TEXT("BaseTint");
+
+	UPROPERTY(EditAnywhere, Category = "Td|Visuals")
+	FName LevelParamName = TEXT("UpgradeLevel");
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|Visuals")
+	TObjectPtr<class UMaterialInstanceDynamic> BodyMID;
+
+	void RefreshMaterial();
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Td")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 

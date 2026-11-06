@@ -11,6 +11,7 @@ class UHealthComponent;
 class UAutoAttackComponent;
 class UStaticMeshComponent;
 class UDefenderData;
+class UMaterialInstanceDynamic;
 
 UCLASS()
 class GADE_SEM2_API ADefender : public AActor, public ITdClickable
@@ -65,6 +66,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Upgrades")
 	float GetEffectiveSlowMultiplier() const;
 
+	// ---- visuals ----
+	// Every defender gets its own Dynamic Material Instance, so recolouring one
+	// never touches the others and upgrade glow is per-unit.
+
+	/** Vector parameter on the mesh material that receives DefenderData::AccentColor. */
+	UPROPERTY(EditAnywhere, Category = "Td|Visuals")
+	FName TintParamName = TEXT("BaseTint");
+
+	/** Scalar parameter that receives CurrentLevel so the material can brighten. */
+	UPROPERTY(EditAnywhere, Category = "Td|Visuals")
+	FName LevelParamName = TEXT("UpgradeLevel");
+
+	UPROPERTY(BlueprintReadOnly, Category = "Td|Visuals")
+	TObjectPtr<UMaterialInstanceDynamic> BodyMID;
+
 	/** Clicking a built defender selects it as the upgrade target. */
 	virtual bool OnClickedByPlayer(ATdPlayerController* Player) override;
 
@@ -102,6 +118,9 @@ protected:
 
 	/** Behaviour-specific half of an upgrade. Runs after the shared stat scaling. */
 	void ApplyUpgradeEffects();
+
+	/** Builds BodyMID and pushes the accent colour and current level into it. */
+	void RefreshMaterial();
 
 	UFUNCTION()
 	void HandleDeath();

@@ -47,4 +47,16 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender")
 	float SlowDuration = 0.f;
+
+	/**
+	 * Pushed into the mesh material as a vector parameter at spawn. Keep
+	 * defenders in the blue/cyan half so friend and foe never read alike.
+	 * Values above 1 bloom, which is what makes them glow.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender|Visuals")
+	FLinearColor AccentColor = FLinearColor(0.1f, 1.2f, 3.f);
+
+	/** Uniform scale applied at spawn. Cheap way to give each type a silhouette. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender|Visuals", meta = (ClampMin = "0.1"))
+	FVector MeshScale = FVector(1.f, 1.f, 1.f);
 };

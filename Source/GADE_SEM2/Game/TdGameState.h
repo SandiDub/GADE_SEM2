@@ -88,6 +88,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Td|Economy")
 	float GoldMultiplier = 1.f;
 
+	/** Kill payouts snap to a multiple of this, so gold is always a round number. */
+	UPROPERTY(BlueprintReadWrite, Category = "Td|Economy", meta = (ClampMin = "1"))
+	int32 GoldRoundTo = 5;
+
 	UPROPERTY(BlueprintAssignable, Category = "Td|Events")
 	FOnTdWaveChanged OnWaveChanged;
 
