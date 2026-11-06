@@ -60,6 +60,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Combat")
 	FVector MuzzleOffset = FVector(0.f, 0.f, 90.f);
 
+	/**
+	 * Played at the muzzle on every volley. Defenders have this copied in from
+	 * their data asset at spawn, so the sound is per type; the central tower
+	 * sets it directly in its Blueprint.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Audio")
+	TObjectPtr<class USoundBase> FireSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Audio", meta = (ClampMin = "0.0"))
+	float FireSoundVolume = 1.f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;

@@ -11,6 +11,7 @@ class UHealthComponent;
 class UStaticMeshComponent;
 class UEnemyData;
 class AActor;
+class USoundBase;
 
 UCLASS()
 class GADE_SEM2_API AEnemy : public AActor
@@ -28,6 +29,10 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Td")
 	ETdTeam GetTeam() const { return ETdTeam::Enemy; }
+
+	/** Played at the death location. Set this in BP_Enemy. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Audio")
+	TObjectPtr<USoundBase> DeathSound;
 
 	void ApplyData(UEnemyData* Data);
 	void SetPath(const FTdPath& InPath);

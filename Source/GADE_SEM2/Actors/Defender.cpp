@@ -4,6 +4,7 @@
 #include "Data/DefenderData.h"
 #include "Components/StaticMeshComponent.h"
 #include "Game/TdPlayerController.h"
+#include "Kismet/GameplayStatics.h"
 
 void ADefender::BeginPlay()
 {
@@ -43,6 +44,8 @@ void ADefender::ApplyData(UDefenderData* Data)
 	AutoAttack->Damage = Data->Damage;
 	AutoAttack->Range = Data->Range;
 	AutoAttack->FireInterval = Data->FireInterval;
+	AutoAttack->FireSound = Data->FireSound;
+	AutoAttack->FireSoundVolume = Data->FireSoundVolume;
 
 	if (Data->Mesh)
 	{
@@ -86,7 +89,13 @@ void ADefender::ApplyHeightAdvantage(float HeightAdvantage)
 }
 void ADefender::HandleDeath()
 {
-	// You can spawn a particle effect or play a sound here later!
+	// Played at a location rather than attached: this actor is about to be
+	// destroyed, and an attached sound component would be torn down with it.
+	if (DeathSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+	}
+
 	Destroy(); // Removes the defender from the map
 }
 

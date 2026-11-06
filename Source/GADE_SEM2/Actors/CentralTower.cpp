@@ -68,6 +68,13 @@ void ACentralTower::HandleHealthChanged(float Current, float Max)
 
 void ACentralTower::HandleDeath()
 {
+	// The hub is not destroyed, so this one could be attached. Kept consistent
+	// with the other death sounds for predictability.
+	if (DeathSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+	}
+
 	if (ATdGameMode* GM = Cast<ATdGameMode>(UGameplayStatics::GetGameMode(this)))
 	{
 		GM->NotifyTowerDestroyed();

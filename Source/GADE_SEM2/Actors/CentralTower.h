@@ -53,6 +53,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Td|Visuals")
 	TObjectPtr<class UMaterialInstanceDynamic> BodyMID;
 
+	/** The hub's own destruction sound. Set this in BP_CentralTower. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Audio")
+	TObjectPtr<class USoundBase> DeathSound;
+
 	void RefreshMaterial();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Td")

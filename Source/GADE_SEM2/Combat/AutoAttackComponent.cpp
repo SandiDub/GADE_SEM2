@@ -4,6 +4,7 @@
 #include "Actors/Enemy.h"
 #include "Actors/Defender.h"
 #include "Data/DefenderData.h"
+#include "Kismet/GameplayStatics.h"
 
 UAutoAttackComponent::UAutoAttackComponent()
 {
@@ -168,6 +169,11 @@ void UAutoAttackComponent::FireAt(AActor* Target)
     const FVector Impact = Target->GetActorLocation();
 
     OnFired.Broadcast(Target, Muzzle, Impact);
+
+    if (FireSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, FireSound, Muzzle, FireSoundVolume);
+    }
 
     if (bDrawDebugTracer)
     {

@@ -7,6 +7,7 @@
 
 class UStaticMesh;
 class USkeletalMesh;
+class USoundBase;
 
 /** One row of defender stats. Part 2 = extra assets, not extra C++ classes. */
 UCLASS(BlueprintType)
@@ -59,4 +60,15 @@ public:
 	/** Uniform scale applied at spawn. Cheap way to give each type a silhouette. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender|Visuals", meta = (ClampMin = "0.1"))
 	FVector MeshScale = FVector(1.f, 1.f, 1.f);
+
+	/**
+	 * Weapon sound for this type, copied onto the attack component at spawn.
+	 * A Gunner chatters, a Mortar thumps, Frost hisses.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender|Audio")
+	TObjectPtr<USoundBase> FireSound;
+
+	/** Per-type trim, so a rapid-fire Gunner does not drown out everything. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Defender|Audio", meta = (ClampMin = "0.0"))
+	float FireSoundVolume = 1.f;
 };

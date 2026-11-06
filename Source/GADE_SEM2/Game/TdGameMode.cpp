@@ -180,6 +180,12 @@ void ATdGameMode::NotifyTowerDestroyed()
 		GS->MatchState = ETdMatchState::GameOver;
 	}
 
+	// 2D so the defeat sting is not attenuated by camera distance.
+	if (GameOverSound)
+	{
+		UGameplayStatics::PlaySound2D(this, GameOverSound);
+	}
+
 	TArray<AActor*> Spawners;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AEnemySpawner::StaticClass(), Spawners);
 	for (AActor* Actor : Spawners)

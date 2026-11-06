@@ -106,6 +106,10 @@ public:
 
 	// ---- periodic repair ----
 
+	/** Defeat sting, played once when the hub falls. Set this in BP_TdGameMode. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Audio")
+	TObjectPtr<class USoundBase> GameOverSound;
+
 	/** Every N defenders placed, the generator releases more build slots. 0 disables. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Balance|Economy", meta = (ClampMin = "0"))
 	int32 DefendersPerSlotUnlock = 4;

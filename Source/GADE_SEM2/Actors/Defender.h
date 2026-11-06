@@ -12,6 +12,7 @@ class UAutoAttackComponent;
 class UStaticMeshComponent;
 class UDefenderData;
 class UMaterialInstanceDynamic;
+class USoundBase;
 
 UCLASS()
 class GADE_SEM2_API ADefender : public AActor, public ITdClickable
@@ -80,6 +81,10 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Td|Visuals")
 	TObjectPtr<UMaterialInstanceDynamic> BodyMID;
+
+	/** Played at the death location. Set this in BP_Defender. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Td|Audio")
+	TObjectPtr<USoundBase> DeathSound;
 
 	/** Clicking a built defender selects it as the upgrade target. */
 	virtual bool OnClickedByPlayer(ATdPlayerController* Player) override;

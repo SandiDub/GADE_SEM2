@@ -328,5 +328,13 @@ void AEnemy::HandleDeath()
         GS->AddKillReward(Reward);
         GS->AddKill();
     }
+
+    // Played at a location rather than attached: this actor is about to be
+    // destroyed, and an attached sound component would be torn down with it.
+    if (DeathSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+    }
+
     Destroy();
 }
