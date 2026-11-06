@@ -865,7 +865,17 @@ void AMapGenerator::ScatterProps()
 		Layer->SetCastShadow(false);
 		if (PropMaterial)
 		{
-			Layer->SetMaterial(0, PropMaterial);
+			// Own instance per layer so the scatter can be recoloured without
+			// disturbing anything else sharing the material.
+			if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(PropMaterial, this))
+			{
+				MID->SetVectorParameterValue(TEXT("BaseTint"), PropTint);
+				Layer->SetMaterial(0, MID);
+			}
+			else
+			{
+				Layer->SetMaterial(0, PropMaterial);
+			}
 		}
 		Layer->SetupAttachment(TerrainMesh);
 		Layer->RegisterComponent();
@@ -895,11 +905,19 @@ void AMapGenerator::ScatterProps()
 			FVector Location = GetCellWorld(C);
 			Location.X += Rng.FRandRange(-HalfCell, HalfCell);
 			Location.Y += Rng.FRandRange(-HalfCell, HalfCell);
+			Location.Z -= PropSinkDepth;
 
-			const FRotator Rotation(0.f, Rng.FRandRange(0.f, 360.f), 0.f);
-			const float Scale = Rng.FRandRange(PropScaleRange.X, PropScaleRange.Y);
+			// Girth and height roll independently, which is what turns a field
+			// of identical blocks into a skyline of spires.
+			const float Girth = Rng.FRandRange(PropScaleRange.X, PropScaleRange.Y);
+			const float Height = Rng.FRandRange(PropHeightRange.X, PropHeightRange.Y);
 
-			Layer->AddInstance(FTransform(Rotation, Location, FVector(Scale)), true);
+			const FRotator Rotation(
+				Rng.FRandRange(-PropMaxTilt, PropMaxTilt),
+				Rng.FRandRange(0.f, 360.f),
+				Rng.FRandRange(-PropMaxTilt, PropMaxTilt));
+
+			Layer->AddInstance(FTransform(Rotation, Location, FVector(Girth, Girth, Height)), true);
 			++Placed;
 		}
 	}

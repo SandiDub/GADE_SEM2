@@ -98,6 +98,12 @@ void AEnemy::ApplyProceduralMutation(FLinearColor& InOutTint, FVector& InOutScal
     const float SizeRoll = Rng.FRandRange(0.82f, 1.25f);
     InOutScale *= SizeRoll;
 
+    // Independent girth-vs-height jitter on top, so even two units that rolled
+    // the same size still read as different builds.
+    InOutScale.X *= Rng.FRandRange(0.9f, 1.15f);
+    InOutScale.Y = InOutScale.X;
+    InOutScale.Z *= Rng.FRandRange(0.85f, 1.2f);
+
     // Bigger bodies carry more mass, smaller ones move quicker.
     Health->MaxHealth *= FMath::Lerp(0.85f, 1.2f, (SizeRoll - 0.82f) / 0.43f);
     MutationSpeedScale *= FMath::Lerp(1.12f, 0.9f, (SizeRoll - 0.82f) / 0.43f);
@@ -125,28 +131,33 @@ void AEnemy::ApplyProceduralMutation(FLinearColor& InOutTint, FVector& InOutScal
 
         switch (Mutation)
         {
+        // Each mutation reshapes the body rather than just resizing it, so the
+        // roll is readable from the silhouette alone at top-down distance.
         case ETdEnemyMutation::Armoured:
             Health->MaxHealth *= 1.6f;
             MutationSpeedScale *= 0.75f;
+            InOutScale *= FVector(1.3f, 1.3f, 0.8f);   // squat and broad
             InOutTint = FLinearColor(1.4f, 0.5f, 0.2f);
             break;
 
         case ETdEnemyMutation::Swift:
             Health->MaxHealth *= 0.65f;
             MutationSpeedScale *= 1.5f;
+            InOutScale *= FVector(0.75f, 0.75f, 1.35f); // narrow and tall
             InOutTint = FLinearColor(3.2f, 0.9f, 0.1f);
             break;
 
         case ETdEnemyMutation::Volatile:
             Health->MaxHealth *= 0.7f;
             MutationDamageScale *= 1.8f;
+            InOutScale *= FVector(1.15f, 1.15f, 1.15f); // swollen
             InOutTint = FLinearColor(4.f, 0.05f, 0.6f);
             break;
 
         case ETdEnemyMutation::Giant:
             Health->MaxHealth *= 2.2f;
             MutationSpeedScale *= 0.6f;
-            InOutScale *= 1.5f;
+            InOutScale *= FVector(1.7f, 1.7f, 1.4f);
             InOutTint = FLinearColor(2.2f, 0.1f, 0.05f);
             break;
 
@@ -154,7 +165,7 @@ void AEnemy::ApplyProceduralMutation(FLinearColor& InOutTint, FVector& InOutScal
             Health->MaxHealth *= 0.5f;
             MutationSpeedScale *= 1.35f;
             MutationDamageScale *= 0.7f;
-            InOutScale *= 0.65f;
+            InOutScale *= FVector(0.6f, 0.6f, 0.8f);
             InOutTint = FLinearColor(2.6f, 1.2f, 0.2f);
             break;
 

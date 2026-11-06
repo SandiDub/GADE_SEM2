@@ -122,11 +122,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Scatter", meta = (ClampMin = "0"))
 	int32 PropClearance = 2;
 
+	/** Girth. Keep this well under 1 or props read as crates rather than spires. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Scatter")
-	FVector2D PropScaleRange = FVector2D(0.6f, 1.8f);
+	FVector2D PropScaleRange = FVector2D(0.25f, 0.6f);
+
+	/** Height, rolled separately from girth. A wide spread is what sells a skyline. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Scatter")
+	FVector2D PropHeightRange = FVector2D(1.2f, 4.5f);
+
+	/** Max random lean, in degrees. A few degrees stops the field looking stamped. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Scatter", meta = (ClampMin = "0.0", ClampMax = "25.0"))
+	float PropMaxTilt = 7.f;
+
+	/** Buries the base so props grow out of the ground instead of resting on it. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Scatter")
+	float PropSinkDepth = 40.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Scatter")
 	TObjectPtr<UMaterialInterface> PropMaterial;
+
+	/** Written into PropMaterial as "BaseTint". Keep it dimmer than any unit. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Td|Scatter")
+	FLinearColor PropTint = FLinearColor(0.16f, 0.05f, 0.34f);
 
 	// ---- unlockable slots ----
 
