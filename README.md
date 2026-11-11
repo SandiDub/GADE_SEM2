@@ -1,63 +1,43 @@
-# SURGE (Tower Defence) 
+# SURGE
 
-## 📖 Project Overview
-This project is a dynamic, procedurally generated Tower Defence game built in Unreal Engine 5. Set against a dark, neon-lit cyberpunk aesthetic, the game challenges players to defend a Central Tower against endless waves of mutating enemies. The core design philosophy revolves around procedural unpredictability balanced by strict economic and tactical rules.
+**Genre:** Procedural Tower Defence  
+**Engine:** Unreal Engine 5  
+**Development Team:** Latita Mvunelo (PCG, Shaders, VFX, UI, C++) & Sandile Dube (PCG Map, Progression Architecture, C++, UI)  
+
+## 📖 Overview
+
+**SURGE** is a dynamic, cyberpunk-themed tower defence game built around procedural generation and adaptive strategy. Rather than fighting static waves of identical instances, players must defend against a continuously mutating threat. Every enemy is mathematically rolled at spawn, forcing players to adapt their static grid defences to highly variable enemy compositions.
 
 ## 🔁 Core Gameplay Loop
-1. **Defend:** Enemies spawn and follow three procedurally carved lanes toward the Central Tower.
-2. **Earn:** Defeating enemies yields Gold.
-3. **Expand:** Reaching specific Gold thresholds dynamically unlocks new build slots on the map.
-4. **Upgrade:** Players spend Gold to deploy distinct defender classes and upgrade them, enhancing both their mechanical stats and visual intensity.
 
----
+1. **Defend:** Place specialized defenders (Gunner, Frost, Mortar) along procedurally generated lanes to stop enemy leaks.
+2. **Adapt:** Analyze enemy mutations in real-time via UI health bar broadcasts (e.g., identifying heavily armoured slow units vs. fragile, highly volatile units).
+3. **Expand:** Earn gold from eliminations to purchase structural upgrades, intensifying defender VFX and dynamically unlocking new tactical build slots.
 
-## ⚙️ Core Mechanics & Systems
+## ⚙️ Key Features & Architecture
 
-### Procedural Enemy Mutations (PCG)
-Rather than using static enemy templates, every unit is procedurally generated at spawn using a seeded `FRandomStream` (hashed from the enemy's instance name and the wave number) to ensure network-safe determinism. 
-* **Continuous Rolls:** Determines subtle hue shifts and physical body size (which derives base health and speed).
-* **Discrete Mutations:** Enemies have a chance to spawn with one of five distinct mutations (e.g., *Armoured*, *Volatile*). 
-* **The "Trade" Philosophy:** Mutations are strictly stat *trades*, not raw buffs. *Armoured* units gain health but suffer movement speed penalties; *Volatile* units deal massive damage but have brittle health. This protects the mathematical integrity of the Wave Director's threat budget.
-* **Pacing Curve:** Mutation probability scales from 15% in Wave 1 up to a hard cap of 65% in later waves, demanding constant tactical adaptation.
+### 1. Procedural Enemy Mutation (PCG)
 
-### Economy and Wave Director
-The Wave Director utilizes a strict threat budget to construct waves. The player's economy is deeply tied to the map itself: as the player hoards Gold, the map physically responds by unlocking new grid slots, forcing the player to decide between upgrading existing towers or expanding their defensive perimeter.
+Enemies are generated at spawn using a deterministic, seeded `FRandomStream` (hashed via instance name and wave number) ensuring network-safe reproducibility. Mutations are designed strictly as **trades** rather than raw buffs to protect the wave director's threat budget:
 
-### Defender Classes & Upgrades
-Players have access to three primary turrets:
-* **Gunner:** High fire rate, single-target damage.
-* **Frost:** Crowd control and enemy slowdown.
-* **Mortar:** Heavy area-of-effect (Splash) damage.
-* **Upgrades:** Every turret (and the Central Tower) can be upgraded twice. Upgrades increase health and damage, while instantly triggering visual feedback (intensified emissive materials and expanding Niagara auras).
+* **Continuous Rolls:** Determines subtle hue shifts and physical body size.
+* **Armoured:** Significant health increase / Severe movement speed penalty.
+* **Volatile:** Massive damage output / Drastic maximum health reduction.
+* **Pacing Curve:** Mutation probability scales dynamically from 15% (Wave 1) to a 65% cap in later stages.
 
----
+### 2. C++ Progression & Economy
 
-## 🎨 Aesthetics & Visual Effects (VFX)
+* **Upgrades:** Defenders and the Central Tower feature a two-tier upgrade system. C++ logic handles budget verification and stat scaling, broadcasting an `OnUpgraded` event to safely decouple logic from the visual layer.
+* **Dynamic Expansion:** Hitting specific round-number economy thresholds automatically unlocks and activates new build slots across the grid.
+* **Scalable UI:** UMG widget layouts are strictly anchored and structured using Box containers and translucent borders to ensure high legibility and zero clipping across varying monitor resolutions.
 
-The game utilizes a striking, high-contrast neon palette against a void-like background to ensure tactical readability.
+### 3. Custom Shaders & Cyberpunk Aesthetics
 
-* **Procedural Map Scatter:** The map generator carves violet lanes through dark blue buildable terrain, using a secondary PCG pass to scatter neon props (cubes, cylinders) across the map without blocking gameplay paths.
-* **Custom Shaders:**
-  * **Vertex Displacement:** The terrain uses a time-driven, clamped Sine wave on the World Position Offset to give the map a gentle, digital "breathing" effect.
-  * **Post-Process:** A custom CRT scanline material overlays the camera to cement the retro-futuristic hacker aesthetic.
-* **Niagara Particle Systems:**
-  * **Dynamic Lasers:** Projectiles are handled via instantaneous, dynamic Niagara beam emitters colored specifically to match the firing defender (Cyan, Blue, etc.).
-  * **Upgrade Auras:** Upgraded units project a looping "Goku-style" energy sphere that grows denser and brighter with each level.
+* **Vertex Displacement Terrain:** The map environment breathes dynamically using a time-driven, clamped Sine wave fed into the World Position Offset pin, safely contained to prevent mesh explosions.
+* **CRT Post-Process:** A fully custom post-process material overlays holographic CRT scanlines across the camera, cementing the retro-futuristic aesthetic.
+* **Dynamic Emissives:** Unit materials utilize `BaseTint` and `UpgradeLevel` parameters exposed to C++ to overdrive their emissive output upon leveling up.
 
----
+### 4. Niagara VFX
 
-## 💻 Technical Architecture
-* **Engine:** Unreal Engine 5 (C++ & Blueprints).
-* **UI/UX:** Scalable UMG widgets anchored for varied aspect ratios, featuring dynamic casting to display real-time PCG mutation names over enemy health bars.
-* **Event-Driven:** Heavy use of delegates and event dispatchers (e.g., `OnFired`, `OnUpgraded`) to keep the C++ backend decoupled from the Blueprint visual layer.
-
----
-
-## 🛠️ Team & Credits
-* **Latita:** Procedural Generation Architecture (Enemies & Map Scatter), Custom Shaders (Vertex Displacement, CRT Post-Process), Niagara VFX (Lasers, Auras).
-* **Sandile:** Progression & Upgrade Architecture, Economic Systems, UI/HUD Layout, Blueprint UI Integration.
-
----
-
-## 🚀 Build & Installation
-*(Build instructions and executable links will be added here prior to final release).*
+* **Dynamic Lasers (`NS_Tracer`):** Defenders fire absolute-world-space beam emitters that read exact `HitLocation` vector coordinates from the C++ `OnFired` event. 
+* **Upgrade Auras (`NS_UpgradeAura`):** A surface-only particle sphere scales in spawn-rate intensity based on the unit's current upgrade level.
